@@ -28,12 +28,19 @@ add_action('wp_enqueue_scripts', function(){
       filemtime( QA_DIR . 'assets/js/quiz-widget.js' ),
       true
     );
+
+    // Pull the array of actions out of your options
+    $opts        = get_option('quiz_assist_options', []);
+    $quizActions = $opts['qa_quiz_actions'] ?? [];
+
     wp_localize_script(
       'qa-quiz-widget',
       'QA_Assist_Quiz_Settings',
-      ['apiBase' => rest_url('quiz-assist/v1')]
+      [
+        'apiBase'     => rest_url('quiz-assist/v1'),
+        'quizActions' => $quizActions,    // ← add this
+      ]
     );
-
     // Global widget
     wp_enqueue_script(
       'qa-global-widget',

@@ -45,29 +45,32 @@ function qa_ask_bot( WP_REST_Request $req ) {
     $p       = $req->get_json_params();
     $q       = sanitize_text_field($p['questionText'] ?? '');
     $answers = is_array($p['answers']??[]) ? $p['answers']: [];
-    $type    = sanitize_text_field($p['promptType']??'');
-    $key     = qa_get_api_key();
+    // now promptType is index into actions array
+    $idx     = intval($p['promptType'] ?? -1);
+    $opts    = get_option('quiz_assist_options',[]);
+    $actions = $opts['qa_quiz_actions'] ?? [];
+    if ( ! isset($actions[$idx]) ) {
+      return new WP_Error('bad_type','Invalid button index',['status'=>400]);
+    }
 
+    $label   = $actions[$idx]['label'];
+    $sys_tpl = $actions[$idx]['sys'];
+    $usr_tpl = $actions[$idx]['user'];
+
+    $key = qa_get_api_key();
     if(!$key) return new WP_Error('no_api_key','Missing key',['status'=>500]);
 
     // build lists
     $all = $crt = $inc = '';
     foreach($answers as $i=>$a){
-      $n = $i+1; $t = sanitize_text_field($a['text']??'');
+      $n = $i+1;
+      $t = sanitize_text_field($a['text']??'');
       $all .= "{$n}. {$t}\n";
       if(!empty($a['correct'])) $crt .= "{$n}. {$t}\n";
-      else                    $inc .= "{$n}. {$t}\n";
+      else                      $inc .= "{$n}. {$t}\n";
     }
 
-    // templates
-    $opts    = get_option('quiz_assist_options',[]);
-    $sys_tpl = trim($opts["qa_{$type}_sys"]    ?? '');
-    $usr_tpl = trim($opts["qa_{$type}_user"]   ?? '');
-    if(!$sys_tpl||!$usr_tpl){
-      return new WP_Error('bad_tpl','Missing template',['status'=>400]);
-    }
-
-    // interpolate user
+    // interpolate user template
     $user_msg = strtr($usr_tpl,[
       '{question}'  =>$q,
       '{list}'      =>$all,
@@ -75,8 +78,8 @@ function qa_ask_bot( WP_REST_Request $req ) {
       '{incorrect}'=>$inc,
     ]);
 
-    qa_log("SYS: {$sys_tpl}");
-    qa_log("USR: {$user_msg}");
+    qa_log("BTN[{$label}] SYS ► {$sys_tpl}");
+    qa_log("BTN[{$label}] USR ► {$user_msg}");
 
     $resp = wp_remote_post('https://api.openai.com/v1/chat/completions',[
       'timeout'=>30,
