@@ -47,8 +47,21 @@ function qa_settings_init() {
 function qa_render_actions() {
     $opts    = get_option('quiz_assist_options', []);
     $actions = $opts['qa_quiz_actions'] ?? [];
+
+    // 1) Card container
+    echo '<div class="qa-card">';
+
+    // 2) Placeholder chips row
+    echo '<div class="qa-placeholders">';
+    foreach ( ['{question}','{list}','{correct}','{incorrect}'] as $ph ) {
+        printf('<span class="qa-chip">%s</span>', esc_html($ph));
+    }
+    echo '<p class="description" style="margin-top:8px;">Use these placeholders in your <em>User Prompt</em>.</p>';
+    echo '</div>';
+
+    // 3) The table
     ?>
-    <table id="qa-actions-table" class="widefat">
+    <table id="qa-actions-table">
       <thead>
         <tr>
           <th>Label</th>
@@ -62,15 +75,17 @@ function qa_render_actions() {
         <tr>
           <td>
             <input name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][label]"
-                   value="<?= esc_attr($act['label']) ?>" class="regular-text"/>
+                   value="<?= esc_attr($act['label']) ?>" />
           </td>
           <td>
-            <textarea name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][sys]"
-                      rows="3" cols="40"><?= esc_textarea($act['sys']) ?></textarea>
+            <textarea name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][sys]" rows="3">
+              <?= esc_textarea($act['sys']) ?>
+            </textarea>
           </td>
           <td>
-            <textarea name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][user]"
-                      rows="3" cols="40"><?= esc_textarea($act['user']) ?></textarea>
+            <textarea name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][user]" rows="3">
+              <?= esc_textarea($act['user']) ?>
+            </textarea>
           </td>
           <td>
             <button class="button qa-remove-action">Delete</button>
@@ -79,19 +94,22 @@ function qa_render_actions() {
         <?php endforeach; ?>
       </tbody>
     </table>
+
     <p>
       <button id="qa-add-action" class="button">+ Add Button</button>
     </p>
 
+    <!-- template for new rows -->
     <template id="qa-action-row-template">
       <tr>
-        <td><input class="regular-text"/></td>
-        <td><textarea rows="3" cols="40"></textarea></td>
-        <td><textarea rows="3" cols="40"></textarea></td>
+        <td><input /></td>
+        <td><textarea rows="3"></textarea></td>
+        <td><textarea rows="3"></textarea></td>
         <td><button class="button qa-remove-action">Delete</button></td>
       </tr>
     </template>
 
+    <!-- jQuery to handle add/remove -->
     <script>
     (function($){
       let table = $('#qa-actions-table tbody');
@@ -99,20 +117,24 @@ function qa_render_actions() {
         e.preventDefault();
         let idx = table.children().length;
         let tpl = $($('#qa-action-row-template').html());
-        tpl.find('input').attr('name', `quiz_assist_options[qa_quiz_actions][${idx}][label]`);
+        tpl.find('input')
+           .attr('name', `quiz_assist_options[qa_quiz_actions][${idx}][label]`);
         tpl.find('textarea').eq(0)
            .attr('name', `quiz_assist_options[qa_quiz_actions][${idx}][sys]`);
         tpl.find('textarea').eq(1)
            .attr('name', `quiz_assist_options[qa_quiz_actions][${idx}][user]`);
         table.append(tpl);
       });
-      $(document).on('click','.qa-remove-action',function(e){
+      $(document).on('click', '.qa-remove-action', function(e){
         e.preventDefault();
         $(this).closest('tr').remove();
       });
     })(jQuery);
     </script>
     <?php
+
+    // 4) Close card
+    echo '</div>';
 }
 
 /**
