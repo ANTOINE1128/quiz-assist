@@ -74,18 +74,22 @@ function qa_render_actions() {
         <?php foreach($actions as $i => $act): ?>
         <tr>
           <td>
-            <input name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][label]"
-                   value="<?= esc_attr($act['label']) ?>" />
+            <input
+              name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][label]"
+              value="<?= esc_attr( trim( $act['label'] ) ) ?>"
+            />
           </td>
           <td>
-            <textarea name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][sys]" rows="3">
-              <?= esc_textarea($act['sys']) ?>
-            </textarea>
+            <textarea
+              name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][sys]"
+              rows="3"
+            ><?= esc_textarea( trim( $act['sys'] ?? '' ) ) ?></textarea>
           </td>
           <td>
-            <textarea name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][user]" rows="3">
-              <?= esc_textarea($act['user']) ?>
-            </textarea>
+            <textarea
+              name="quiz_assist_options[qa_quiz_actions][<?= $i ?>][user]"
+              rows="3"
+            ><?= esc_textarea( trim( $act['user'] ?? '' ) ) ?></textarea>
           </td>
           <td>
             <button class="button qa-remove-action">Delete</button>
@@ -144,15 +148,15 @@ function qa_sanitize_options( $input ) {
     $clean = [];
 
     // 1) API key
-    $clean['qa_openai_key'] = sanitize_text_field( $input['qa_openai_key'] ?? '' );
+    $clean['qa_openai_key'] = sanitize_text_field( trim( $input['qa_openai_key'] ?? '' ) );
 
     // 2) Quiz Actions repeater
     $clean['qa_quiz_actions'] = [];
     if ( ! empty( $input['qa_quiz_actions'] ) && is_array( $input['qa_quiz_actions'] ) ) {
       foreach ( $input['qa_quiz_actions'] as $act ) {
-        $label = sanitize_text_field( $act['label']   ?? '' );
-        $sys   = wp_kses_post(      $act['sys']     ?? '' );
-        $user  = wp_kses_post(      $act['user']    ?? '' );
+        $label = sanitize_text_field( trim( $act['label'] ?? '' ) );
+        $sys   = wp_kses_post( trim( $act['sys']   ?? '' ) );
+        $user  = wp_kses_post( trim( $act['user']  ?? '' ) );
         if ( $label && $sys && $user ) {
           $clean['qa_quiz_actions'][] = compact('label','sys','user');
         }
@@ -160,26 +164,32 @@ function qa_sanitize_options( $input ) {
     }
 
     // 3) Global system prompt
-    $clean['qa_global_prompt'] = wp_kses_post( $input['qa_global_prompt'] ?? '' );
+    $clean['qa_global_prompt'] = wp_kses_post( trim( $input['qa_global_prompt'] ?? '' ) );
 
     return $clean;
 }
 
 function qa_render_text( $args ) {
     $opts = get_option('quiz_assist_options',[]);
+    $val  = isset( $opts[ $args['field'] ] )
+          ? trim( $opts[ $args['field'] ] )
+          : '';
     printf(
       '<input type="%s" name="quiz_assist_options[%s]" value="%s" class="regular-text"/>',
       esc_attr($args['type']),
       esc_attr($args['field']),
-      esc_attr($opts[$args['field']] ?? '')
+      esc_attr( $val )
     );
 }
 
 function qa_render_textarea( $args ) {
     $opts = get_option('quiz_assist_options',[]);
+    $val  = isset( $opts[ $args['field'] ] )
+          ? trim( $opts[ $args['field'] ] )
+          : '';
     printf(
       '<textarea name="quiz_assist_options[%s]" rows="5" cols="80">%s</textarea>',
       esc_attr($args['field']),
-      esc_textarea($opts[$args['field']] ?? '')
+      esc_textarea( $val )
     );
 }
