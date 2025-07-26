@@ -14,7 +14,7 @@ function qa_settings_init() {
       'quizAssist'
     );
 
-    // API Key
+    // 1) API Key
     add_settings_field(
       'qa_openai_key',
       'OpenAI API Key',
@@ -24,7 +24,7 @@ function qa_settings_init() {
       ['field'=>'qa_openai_key','type'=>'text']
     );
 
-    // Quiz Actions Repeater
+    // 2) Quiz Actions Repeater
     add_settings_field(
       'qa_quiz_actions',
       'Quiz Widget Actions',
@@ -33,7 +33,16 @@ function qa_settings_init() {
       'qa_section'
     );
 
-    // Global chat
+    // 3) Model selector
+    add_settings_field(
+      'qa_model',
+      'OpenAI Model',
+      'qa_render_model',
+      'quizAssist',
+      'qa_section'
+    );
+
+    // 4) Global chat system prompt
     add_settings_field(
       'qa_global_prompt',
       'Global Chat System Prompt',
@@ -48,18 +57,13 @@ function qa_render_actions() {
     $opts    = get_option('quiz_assist_options', []);
     $actions = $opts['qa_quiz_actions'] ?? [];
 
-    // 1) Card container
     echo '<div class="qa-card">';
-
-    // 2) Placeholder chips row
     echo '<div class="qa-placeholders">';
     foreach ( ['{question}','{list}','{correct}','{incorrect}'] as $ph ) {
         printf('<span class="qa-chip">%s</span>', esc_html($ph));
     }
     echo '<p class="description" style="margin-top:8px;">Use these placeholders in your <em>User Prompt</em>.</p>';
     echo '</div>';
-
-    // 3) The table
     ?>
     <table id="qa-actions-table">
       <thead>
@@ -103,7 +107,6 @@ function qa_render_actions() {
       <button id="qa-add-action" class="button">+ Add Button</button>
     </p>
 
-    <!-- template for new rows -->
     <template id="qa-action-row-template">
       <tr>
         <td><input /></td>
@@ -113,11 +116,10 @@ function qa_render_actions() {
       </tr>
     </template>
 
-    <!-- jQuery to handle add/remove -->
     <script>
     (function($){
       let table = $('#qa-actions-table tbody');
-      $('#qa-add-action').on('click', function(e){
+      $('#qa-add-action').on('click', e => {
         e.preventDefault();
         let idx = table.children().length;
         let tpl = $($('#qa-action-row-template').html());
@@ -136,60 +138,111 @@ function qa_render_actions() {
     })(jQuery);
     </script>
     <?php
-
-    // 4) Close card
     echo '</div>';
 }
 
-/**
- * Sanitize the entire options array.
- */
+function qa_render_model() {
+  $opts = get_option('quiz_assist_options', []);
+  $current = $opts['qa_model'] ?? 'gpt-4';
+
+  // Get API key from settings
+  $api_key = $opts['qa_openai_key'] ?? '';
+
+  if (empty($api_key)) {
+    echo '<p style="color:red;">Please set your OpenAI API key first.</p>';
+    return;
+  }
+
+  // Fetch models from OpenAI
+  $response = wp_remote_get('https://api.openai.com/v1/models', [
+    'headers' => [
+      'Authorization' => 'Bearer ' . trim($api_key),
+      'Content-Type'  => 'application/json',
+    ],
+    'timeout' => 20,
+  ]);
+
+  if (is_wp_error($response)) {
+    echo '<p style="color:red;">Error fetching models: ' . esc_html($response->get_error_message()) . '</p>';
+    return;
+  }
+
+  $body = wp_remote_retrieve_body($response);
+  $data = json_decode($body, true);
+
+  if (empty($data['data'])) {
+    echo '<p style="color:red;">No models returned from API. Please check your API key or permissions.</p>';
+    return;
+  }
+
+  $available_models = array_column($data['data'], 'id');
+  
+  // Filter for relevant GPT models only
+  $filtered_models = array_filter($available_models, function($model) {
+    return preg_match('/^(gpt-(3\.5|4|4o|4\.5)[\w\-]*)$/i', $model);
+  });
+
+  // Sort models by name
+  sort($filtered_models);
+
+  echo '<select name="quiz_assist_options[qa_model]">';
+  foreach ($filtered_models as $model) {
+    printf(
+      '<option value="%s"%s>%s</option>',
+      esc_attr($model),
+      selected($current, $model, false),
+      esc_html($model)
+    );
+  }
+  echo '</select>';
+}
+
+
+function qa_render_text( $args ) {
+    $opts = get_option('quiz_assist_options',[]);
+    $val  = trim( $opts[$args['field']] ?? '' );
+    printf(
+      '<input type="%s" name="quiz_assist_options[%s]" value="%s" class="regular-text"/>',
+      esc_attr($args['type']),
+      esc_attr($args['field']),
+      esc_attr($val)
+    );
+}
+
+function qa_render_textarea( $args ) {
+    $opts = get_option('quiz_assist_options',[]);
+    $val  = trim( $opts[$args['field']] ?? '' );
+    printf(
+      '<textarea name="quiz_assist_options[%s]" rows="5" cols="80">%s</textarea>',
+      esc_attr($args['field']),
+      esc_textarea($val)
+    );
+}
+
 function qa_sanitize_options( $input ) {
     $clean = [];
 
-    // 1) API key
+    // API Key
     $clean['qa_openai_key'] = sanitize_text_field( trim( $input['qa_openai_key'] ?? '' ) );
 
-    // 2) Quiz Actions repeater
+    // Quiz Actions
     $clean['qa_quiz_actions'] = [];
     if ( ! empty( $input['qa_quiz_actions'] ) && is_array( $input['qa_quiz_actions'] ) ) {
       foreach ( $input['qa_quiz_actions'] as $act ) {
         $label = sanitize_text_field( trim( $act['label'] ?? '' ) );
-        $sys   = wp_kses_post( trim( $act['sys']   ?? '' ) );
-        $user  = wp_kses_post( trim( $act['user']  ?? '' ) );
+        $sys   = wp_kses_post(      trim( $act['sys']   ?? '' ) );
+        $user  = wp_kses_post(      trim( $act['user']  ?? '' ) );
         if ( $label && $sys && $user ) {
           $clean['qa_quiz_actions'][] = compact('label','sys','user');
         }
       }
     }
 
-    // 3) Global system prompt
+    // Model choice
+    $clean['qa_model'] = sanitize_text_field( trim( $input['qa_model'] ?? 'gpt-4' ) );
+
+    // Global Prompt
     $clean['qa_global_prompt'] = wp_kses_post( trim( $input['qa_global_prompt'] ?? '' ) );
 
     return $clean;
-}
-
-function qa_render_text( $args ) {
-    $opts = get_option('quiz_assist_options',[]);
-    $val  = isset( $opts[ $args['field'] ] )
-          ? trim( $opts[ $args['field'] ] )
-          : '';
-    printf(
-      '<input type="%s" name="quiz_assist_options[%s]" value="%s" class="regular-text"/>',
-      esc_attr($args['type']),
-      esc_attr($args['field']),
-      esc_attr( $val )
-    );
-}
-
-function qa_render_textarea( $args ) {
-    $opts = get_option('quiz_assist_options',[]);
-    $val  = isset( $opts[ $args['field'] ] )
-          ? trim( $opts[ $args['field'] ] )
-          : '';
-    printf(
-      '<textarea name="quiz_assist_options[%s]" rows="5" cols="80">%s</textarea>',
-      esc_attr($args['field']),
-      esc_textarea( $val )
-    );
 }

@@ -45,20 +45,34 @@ function qa_ask_bot( WP_REST_Request $req ) {
     $p       = $req->get_json_params();
     $q       = sanitize_text_field($p['questionText'] ?? '');
     $answers = is_array($p['answers']??[]) ? $p['answers']: [];
-    // now promptType is index into actions array
     $idx     = intval($p['promptType'] ?? -1);
+
     $opts    = get_option('quiz_assist_options',[]);
     $actions = $opts['qa_quiz_actions'] ?? [];
+
     if ( ! isset($actions[$idx]) ) {
       return new WP_Error('bad_type','Invalid button index',['status'=>400]);
     }
 
     $label   = $actions[$idx]['label'];
-    $sys_tpl = $actions[$idx]['sys'];
-    $usr_tpl = $actions[$idx]['user'];
+    $sys_tpl = trim($actions[$idx]['sys'] ?? '');
+    $usr_tpl = trim($actions[$idx]['user'] ?? '');
+
+    // 1) Validate templates
+    if ( $sys_tpl === '' || $usr_tpl === '' ) {
+        qa_log("ERROR ► Missing sys/user template for action #{$idx}");
+        return new WP_Error(
+          'missing_template',
+          'One of your System or User prompts is empty. Please fill it in the dashboard.',
+          ['status'=>400]
+        );
+    }
 
     $key = qa_get_api_key();
-    if(!$key) return new WP_Error('no_api_key','Missing key',['status'=>500]);
+    if(!$key) {
+      qa_log("ERROR ► Missing OpenAI API key");
+      return new WP_Error('no_api_key','OpenAI API key not set',['status'=>500]);
+    }
 
     // build lists
     $all = $crt = $inc = '';
@@ -72,15 +86,16 @@ function qa_ask_bot( WP_REST_Request $req ) {
 
     // interpolate user template
     $user_msg = strtr($usr_tpl,[
-      '{question}'  =>$q,
-      '{list}'      =>$all,
-      '{correct}'   =>$crt,
-      '{incorrect}'=>$inc,
+      '{question}'  => $q,
+      '{list}'      => $all,
+      '{correct}'   => $crt,
+      '{incorrect}' => $inc,
     ]);
 
     qa_log("BTN[{$label}] SYS ► {$sys_tpl}");
     qa_log("BTN[{$label}] USR ► {$user_msg}");
 
+    // Call OpenAI
     $resp = wp_remote_post('https://api.openai.com/v1/chat/completions',[
       'timeout'=>30,
       'headers'=>[
@@ -88,7 +103,7 @@ function qa_ask_bot( WP_REST_Request $req ) {
         'Content-Type'=>'application/json',
       ],
       'body'=>wp_json_encode([
-        'model'=>'gpt-4',
+        'model'=> $opts['qa_model'] ?? 'gpt-4',
         'messages'=>[
           ['role'=>'system','content'=>$sys_tpl],
           ['role'=>'user','content'=>$user_msg],
@@ -99,11 +114,25 @@ function qa_ask_bot( WP_REST_Request $req ) {
     ]);
 
     if(is_wp_error($resp)){
-      qa_log($resp->get_error_message());
+      qa_log("WP_ERROR ► " . $resp->get_error_message());
       return new WP_Error('openai_fail','OpenAI error',['status'=>500]);
     }
 
     $body = wp_remote_retrieve_body($resp);
+    qa_log("RAW OPENAI ► " . $body);
+
     $j    = json_decode($body,true);
-    return ['reply'=>$j['choices'][0]['message']['content'] ?? ''];
+    $reply = $j['choices'][0]['message']['content'] ?? '';
+
+    // 2) Validate reply
+    if ( trim($reply) === '' ) {
+      qa_log("EMPTY_REPLY ► action={$idx} body={$body}");
+      return new WP_Error(
+        'empty_reply',
+        'The model returned an empty response. Please try again.',
+        ['status'=>500]
+      );
+    }
+
+    return ['reply'=>$reply];
 }
