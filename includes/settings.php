@@ -141,61 +141,60 @@ function qa_render_actions() {
     echo '</div>';
 }
 
+/**
+ * Render a <select> of all models your API key can access.
+ */
 function qa_render_model() {
-  $opts = get_option('quiz_assist_options', []);
-  $current = $opts['qa_model'] ?? 'gpt-4';
+  $opts     = get_option('quiz_assist_options', []);
+  $current  = $opts['qa_model'] ?? 'gpt-4';
+  $api_key  = trim( $opts['qa_openai_key'] ?? '' );
 
-  // Get API key from settings
-  $api_key = $opts['qa_openai_key'] ?? '';
-
-  if (empty($api_key)) {
-    echo '<p style="color:red;">Please set your OpenAI API key first.</p>';
+  if ( ! $api_key ) {
+    echo '<p style="color:red;">Enter your OpenAI API key to load models.</p>';
     return;
   }
 
-  // Fetch models from OpenAI
-  $response = wp_remote_get('https://api.openai.com/v1/models', [
+  // 1) Fetch models
+  $resp = wp_remote_get( 'https://api.openai.com/v1/models', [
     'headers' => [
-      'Authorization' => 'Bearer ' . trim($api_key),
+      'Authorization' => "Bearer {$api_key}",
       'Content-Type'  => 'application/json',
     ],
     'timeout' => 20,
-  ]);
+  ] );
 
-  if (is_wp_error($response)) {
-    echo '<p style="color:red;">Error fetching models: ' . esc_html($response->get_error_message()) . '</p>';
+  if ( is_wp_error( $resp ) ) {
+    echo '<p style="color:red;">Error fetching models: '
+       . esc_html( $resp->get_error_message() )
+       . '</p>';
     return;
   }
 
-  $body = wp_remote_retrieve_body($response);
-  $data = json_decode($body, true);
+  $body = wp_remote_retrieve_body( $resp );
+  $data = json_decode( $body, true );
 
-  if (empty($data['data'])) {
-    echo '<p style="color:red;">No models returned from API. Please check your API key or permissions.</p>';
+  if ( empty( $data['data'] ) || ! is_array( $data['data'] ) ) {
+    echo '<p style="color:red;">Unexpected response from OpenAI. '
+       . 'Check your API key or your network settings.</p>';
     return;
   }
 
-  $available_models = array_column($data['data'], 'id');
-  
-  // Filter for relevant GPT models only
-  $filtered_models = array_filter($available_models, function($model) {
-    return preg_match('/^(gpt-(3\.5|4|4o|4\.5)[\w\-]*)$/i', $model);
-  });
+  // 2) Pull out model IDs
+  $models = array_column( $data['data'], 'id' );
+  sort( $models, SORT_NATURAL );
 
-  // Sort models by name
-  sort($filtered_models);
-
+  // 3) Render <select>
   echo '<select name="quiz_assist_options[qa_model]">';
-  foreach ($filtered_models as $model) {
+  foreach ( $models as $model_id ) {
     printf(
-      '<option value="%s"%s>%s</option>',
-      esc_attr($model),
-      selected($current, $model, false),
-      esc_html($model)
+      '<option value="%1$s"%2$s>%1$s</option>',
+      esc_attr( $model_id ),
+      selected( $current, $model_id, false )
     );
   }
   echo '</select>';
 }
+
 
 
 function qa_render_text( $args ) {
