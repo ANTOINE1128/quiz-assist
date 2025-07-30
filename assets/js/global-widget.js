@@ -1,184 +1,70 @@
-// ;(function() {
-//   const e = React.createElement;
-//   const { useState, useEffect, useRef } = React;
+// assets/js/global-widget.js
+;(function(wp){
+  const { createElement, useState } = wp.element;
+  const { render }                  = wp.element;
 
-//   function GlobalChat() {
-//     const [open, setOpen]   = useState(false);
-//     const [input, setInput] = useState('');
-//     const [msgs, setMsgs]   = useState([]);
-//     const panelRef          = useRef(null);
+  function GlobalChat() {
+    const { apiBase, globalActions } = window.QA_Assist_Global_Settings;
+    const [reply, setReply]     = useState('');
+    const [loading, setLoading] = useState(false);
 
-//     // close if click outside
-//     useEffect(() => {
-//       function onClick(e) {
-//         if (open && panelRef.current && !panelRef.current.contains(e.target)) {
-//           setOpen(false);
-//         }
-//       }
-//       document.addEventListener('mousedown', onClick);
-//       return () => document.removeEventListener('mousedown', onClick);
-//     }, [open]);
+    const send = async idx => {
+      const act = globalActions[idx];
+      if (!act) return;
 
-//     // don't render on quiz pages
-//     if (document.querySelector('.wpProQuiz_listItem')) return null;
+      setLoading(true);
+      setReply('');
 
-//     const send = async () => {
-//       const text = input.trim();
-//       if (!text) return;
-//       setMsgs(ms => [...ms, { role:'user', text }]);
-//       setInput('');
-//       try {
-//         const res = await fetch(
-//           QA_Assist_Global_Settings.apiBase + '/global-chat',
-//           {
-//             method: 'POST',
-//             headers:{ 'Content-Type':'application/json' },
-//             body: JSON.stringify({ message: text })
-//           }
-//         );
-//         const { reply } = await res.json();
-//         setMsgs(ms => [...ms, { role:'assistant', text: reply || '❌ No reply.' }]);
-//       } catch {
-//         setMsgs(ms => [...ms, { role:'assistant', text:'❌ Request failed.' }]);
-//       }
-//     };
+      try {
+        const res = await fetch(`${apiBase}/global-chat`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ message: act.user })
+        });
+        const data = await res.json();
+        setReply(data.reply || '⚠️ No answer');
+      } catch (err) {
+        setReply(`❌ ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-//     // styles
-//     const S = {
-//       container: {
-//         position: 'fixed',
-//         bottom: '20px',
-//         right: '20px',
-//         zIndex: 2147483647,
-//         fontFamily: 'system-ui, -apple-system, sans-serif'
-//       },
-//       collapsedBar: {
-//         display: 'flex',
-//         alignItems: 'center',
-//         justifyContent: 'center',
-//         width: '140px',
-//         height: '40px',
-//         borderRadius: '20px',
-//         background: '#0073E6',
-//         color: '#fff',
-//         cursor: 'pointer',
-//         boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-//         userSelect: 'none'
-//       },
-//       panel: {
-//         width: '350px',
-//         height: '480px',
-//         background: '#fff',
-//         borderRadius: '12px',
-//         boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-//         display: 'flex',
-//         flexDirection: 'column',
-//         overflow: 'hidden'
-//       },
-//       header: {
-//         background: '#0073E6',
-//         color: '#fff',
-//         padding: '12px 16px',
-//         fontSize: '16px',
-//         fontWeight: 600,
-//         display: 'flex',
-//         justifyContent: 'space-between',
-//         alignItems: 'center'
-//       },
-//       closeBtn: {
-//         background: 'transparent',
-//         border: 'none',
-//         color: '#fff',
-//         fontSize: '20px',
-//         cursor: 'pointer',
-//         lineHeight: 1
-//       },
-//       messages: {
-//         flex: 1,
-//         padding: '12px',
-//         overflowY: 'auto',
-//         background: '#F2F6FC'
-//       },
-//       msgBubble: isUser => ({
-//         maxWidth: '75%',
-//         marginBottom: '10px',
-//         padding: '8px 12px',
-//         borderRadius: '16px',
-//         background: isUser ? '#0073E6' : '#E1E9F5',
-//         color: isUser ? '#fff' : '#1F2A37',
-//         alignSelf: isUser ? 'flex-end' : 'flex-start',
-//         fontSize: '14px',
-//         lineHeight: 1.4
-//       }),
-//       inputBar: {
-//         borderTop: '1px solid #DDD',
-//         display: 'flex',
-//         padding: '8px',
-//         background: '#fff'
-//       },
-//       input: {
-//         flex: 1,
-//         border: '1px solid #CCC',
-//         borderRadius: '20px',
-//         padding: '8px 12px',
-//         fontSize: '14px',
-//         outline: 'none'
-//       },
-//       sendBtn: {
-//         marginLeft: '8px',
-//         background: '#0073E6',
-//         color: '#fff',
-//         border: 'none',
-//         borderRadius: '20px',
-//         padding: '0 16px',
-//         cursor: 'pointer',
-//         fontSize: '14px'
-//       }
-//     };
+    if (!globalActions || !globalActions.length) {
+      return null;
+    }
 
-//     return e('div', { style: S.container, ref: panelRef },
-//       // collapsed
-//       !open
-//         ? e('div',{
-//             style: S.collapsedBar,
-//             onClick: ()=>setOpen(true),
-//             'aria-label':'Open site assistant'
-//           }, 'Chat AI')
-//         // expanded
-//         : e('div',{ style: S.panel },
-//             // header
-//             e('div',{ style: S.header },
-//               e('span',null,'Farhat AI Assistant'),
-//               e('button',{
-//                 style: S.closeBtn,
-//                 onClick: ()=>setOpen(false),
-//                 'aria-label':'Close'
-//               }, '✕')
-//             ),
-//             // messages
-//             e('div',{ style: S.messages },
-//               msgs.map((m,i)=>
-//                 e('div',{ key:i, style: S.msgBubble(m.role==='user') }, m.text)
-//               )
-//             ),
-//             // input
-//             e('div',{ style: S.inputBar },
-//               e('input',{
-//                 style: S.input,
-//                 value: input,
-//                 placeholder:'Type a question…',
-//                 onChange:e=>setInput(e.target.value),
-//                 onKeyDown:e=> e.key==='Enter' && send()
-//               }),
-//               e('button',{ style: S.sendBtn, onClick:send }, 'Send')
-//             )
-//           )
-//     );
-//   }
+    return createElement(
+      'div',
+      { className: 'qa-global' },
+      createElement(
+        'div',
+        { className: 'qa-global-buttons' },
+        globalActions.map((a, i) =>
+          createElement(
+            'button',
+            {
+              key:       i,
+              disabled:  loading,
+              onClick:   () => send(i),
+            },
+            a.label
+          )
+        )
+      ),
+      createElement(
+        'div',
+        { className: 'qa-global-reply' },
+        loading ? 'Thinking…' : reply
+      )
+    );
+  }
 
-//   document.addEventListener('DOMContentLoaded', ()=>{
-//     const mount = document.createElement('div');
-//     document.body.appendChild(mount);
-//     ReactDOM.render(e(GlobalChat), mount);
-//   });
-// })();
+  // Wait for the footer-placeholder to exist...
+  document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('qa-global-root');
+    if (root) {
+      render(createElement(GlobalChat), root);
+    }
+  });
+})(window.wp);
