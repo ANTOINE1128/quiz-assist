@@ -1,8 +1,13 @@
-// assets/js/global-widget.js
 ;(function(wp){
   const { createElement, useState, useEffect } = wp.element;
   const { render } = wp.element;
-  const { apiBase, pollInterval } = window.QA_Assist_Global_SETTINGS;
+  const {
+    apiBase,
+    pollInterval,
+    isUserLoggedIn,
+    currentUserName,
+    restNonce
+  } = window.QA_Assist_Global_SETTINGS || {};
 
   function GlobalWidget() {
     const [open, setOpen]         = useState(false);
@@ -10,176 +15,197 @@
     const [sessionId, setSession] = useState('');
     const [messages, setMessages] = useState([]);
     const [input, setInput]       = useState('');
+    const [guestName, setGuestName]   = useState('');
+    const [guestEmail, setGuestEmail] = useState('');
+    const [guestPhone, setGuestPhone] = useState('');
     const [lastSentAt, setLastSentAt] = useState(0);
+    const [starting, setStarting]     = useState(false);
+    const [error, setError]           = useState('');
 
-    // Hydrate session from localStorage on mount
+    const authHeaders = () => {
+      const h = { 'Content-Type':'application/json' };
+      if (restNonce) h['X-WP-Nonce'] = restNonce;
+      return h;
+    };
+
+    // Hydrate session from storage
     useEffect(() => {
-      const saved = localStorage.getItem('qa_chat_session');
-      if (saved) {
-        setSession(saved);
-        setStarted(true);
-        setOpen(true);
-      }
+      const s = localStorage.getItem('qa_chat_session');
+      if (s) { setSession(s); setStarted(true); setOpen(true); }
     }, []);
 
-    // Kick off a new session once user opens & starts
+    // Start session
     useEffect(() => {
-      if (open && started && !sessionId) {
-        fetch(`${apiBase}/chat/start`, { method: 'POST' })
-          .then(r => r.json())
-          .then(d => {
-            if ( d.session_id ) {
-              setSession(d.session_id);
-              localStorage.setItem('qa_chat_session', d.session_id);
+      if (!open || !started || sessionId) return;
+      (async () => {
+        try {
+          setStarting(true); setError('');
+          const payload = {};
+          if (!isUserLoggedIn) {
+            payload.guest_name  = (guestName||'').trim();
+            payload.guest_email = (guestEmail||'').trim();
+            payload.guest_phone = (guestPhone||'').trim();
+            if (!payload.guest_name || !payload.guest_email || !payload.guest_phone) {
+              setError('Please fill your name, email and phone.');
+              setStarting(false);
+              setStarted(false);
+              return;
             }
-          })
-          .catch(console.error);
-      }
-    }, [open, started, sessionId]);
+          }
+          const res = await fetch(`${apiBase}/chat/start`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(payload || {})
+          });
+          if (!res.ok) {
+            const j = await res.json().catch(()=>({}));
+            setError(j && j.message ? j.message : 'Could not start chat. Please try again.');
+            setStarting(false);
+            setStarted(false);
+            return;
+          }
+          const d = await res.json();
+          if (d.session_id) {
+            setSession(d.session_id);
+            localStorage.setItem('qa_chat_session', d.session_id);
+          } else {
+            setError('Could not start chat. Please try again.');
+            setStarting(false);
+            setStarted(false);
+          }
+        } catch(e) {
+          setError('Network error. Please try again.');
+          setStarting(false);
+          setStarted(false);
+        } finally {
+          setStarting(false);
+        }
+      })();
+    }, [open, started, sessionId, guestName, guestEmail, guestPhone]);
 
-    // Poll for new messages only when open & session exists
+    // Poll messages; if server says no_session, reset widget
     useEffect(() => {
       if (!open || !started || !sessionId) return;
-
       let iv;
-      const load = () => {
-        // if tab hidden, skip
-        if (document.hidden) return;
-        fetch(`${apiBase}/chat/messages?session_id=${sessionId}`)
-          .then(r => r.ok ? r.json() : Promise.reject(r.status))
-          .then(data => setMessages(data.messages || []))
-          .catch(console.error);
+      const resetToPrechat = () => {
+        localStorage.removeItem('qa_chat_session');
+        setSession('');
+        setStarted(false);
+        setMessages([]);
       };
-
-      // start polling
+      const load = async () => {
+        try {
+          if (document.hidden) return;
+          const r = await fetch(`${apiBase}/chat/messages?session_id=${sessionId}`, {
+            headers: restNonce ? { 'X-WP-Nonce': restNonce } : {}
+          });
+          if (!r.ok) {
+            let j = {};
+            try { j = await r.json(); } catch(_){}
+            if (j && j.code === 'no_session') resetToPrechat();
+            return;
+          }
+          const d = await r.json();
+          setMessages(d.messages || []);
+        } catch(e) { /* ignore */ }
+      };
       load();
       iv = setInterval(load, pollInterval);
-
-      // pause/resume on visibility change
       const onVis = () => {
-        if (document.hidden) {
-          clearInterval(iv);
-        } else {
+        clearInterval(iv);
+        if (!document.hidden) {
           load();
           iv = setInterval(load, pollInterval);
         }
       };
       document.addEventListener('visibilitychange', onVis);
-
       return () => {
         clearInterval(iv);
         document.removeEventListener('visibilitychange', onVis);
       };
     }, [open, started, sessionId]);
 
-    // Send a message (debounced to 1s cooldown)
-    const sendMessage = () => {
+    const sendMessage = async () => {
       const now = Date.now();
-      if (!input.trim() || !sessionId || now - lastSentAt < 1000) return;
-
+      if (!input.trim() || !sessionId || now - lastSentAt < 800) return;
       setLastSentAt(now);
-      const text = input.trim();
-
-      // immediately update UI
-      setMessages(prev => [
-        ...prev,
-        { sender: 'user', message: text, created_at: new Date().toLocaleTimeString() }
-      ]);
+      const txt = input.trim();
+      setMessages(m => [...m, { sender:'user', message:txt, created_at:new Date().toLocaleTimeString() }]);
       setInput('');
-
-      // fire-and-forget
-      fetch(`${apiBase}/chat/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: text })
-      }).catch(console.error);
+      try {
+        const r = await fetch(`${apiBase}/chat/send`, {
+          method:'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ session_id: sessionId, message: txt })
+        });
+        if (!r.ok) {
+          let j = {};
+          try { j = await r.json(); } catch(_){}
+          if (j && j.code === 'no_session') {
+            localStorage.removeItem('qa_chat_session');
+            setSession(''); setStarted(false); setMessages([]);
+          }
+        }
+      } catch(e) {}
     };
 
     const beginChat = () => {
-      setStarted(true);
-      setOpen(true);
+      setError('');
+      if (isUserLoggedIn) {
+        setStarted(true); setOpen(true);
+      } else {
+        if (guestName && guestEmail && guestPhone) setStarted(true);
+        else setError('Please fill your name, email and phone.');
+      }
     };
-    const lastIsUser = messages.length > 0 && messages[messages.length-1].sender === 'user';
 
-    return createElement(
-      'div',
-      { className: 'qa-global' },
+    const lastIsUser = messages.length && messages[messages.length-1].sender === 'user';
 
-      // Toggle button
-      createElement(
-        'div',
-        { className: 'qa-chat-toggle', onClick: () => setOpen(o => !o) },
-        open ? '×' : 'Send us a message'
+    return createElement('div',{className:'qa-global'},
+      createElement('button',{className:'qa-chat-toggle',onClick:()=>setOpen(o=>!o)},
+        open ? '×' : 'Chat with us'
       ),
 
-      // Pre-chat state
-      open && !started && createElement(
-        'div',
-        { className: 'qa-chat-box' },
-        createElement('div', { className: 'qa-chat-header' }, 'Hi there 👋 How can we help?'),
-        createElement('div', { className: 'qa-chat-links' },
-          createElement('button', { className: 'qa-link-btn', onClick: beginChat }, 'Send us a message'),
-          createElement('a', {
-            className: 'qa-link-btn',
-            href:      '/faq#getting-started',
-            target:    '_blank'
-          }, 'Resources for Getting Started'),
-          createElement('a', {
-            className: 'qa-link-btn',
-            href:      '/pricing#plans',
-            target:    '_blank'
-          }, 'Compare Pricing Plans')
+      // Modal (pre-chat)
+      open && !started && createElement('div',{className:'qa-modal'},
+        createElement('div',{className:'qa-modal-content'},
+          createElement('h2',null,'Welcome ' + (isUserLoggedIn ? (currentUserName || 'User') : 'Guest')),
+          !isUserLoggedIn && createElement('div',{className:'qa-guest-form'},
+            createElement('input',{type:'text',placeholder:'Your Name',value:guestName,onChange:e=>setGuestName(e.target.value)}),
+            createElement('input',{type:'email',placeholder:'Your Email',value:guestEmail,onChange:e=>setGuestEmail(e.target.value)}),
+            createElement('input',{type:'tel',placeholder:'Phone',value:guestPhone,onChange:e=>setGuestPhone(e.target.value)})
+          ),
+          error && createElement('div',{style:{color:'#b91c1c',marginTop:8,fontSize:13}}, error),
+          createElement('button',{className:'qa-start-btn',onClick:beginChat, disabled:starting},
+            starting ? 'Starting…' : 'Start Chat'
+          )
         )
       ),
 
       // Chat UI
-      open && started && createElement(
-        'div',
-        { className: 'qa-chat-box' },
-
-        // Header
-        createElement('div', { className: 'qa-chat-header' }, 'Chat with us'),
-
-        // Message list
-        createElement('div', { className: 'qa-chat-messages' },
-          messages.map((m, i) =>
-            createElement(
-              'div',
-              { key: i, className: `qa-chat-message ${m.sender}` },
-              m.message,
-              createElement('div', { className: 'qa-chat-timestamp' }, m.created_at)
-            )
-          ),
-          lastIsUser && createElement(
-            'div',
-            { className: 'qa-chat-waiting' },
-            'Waiting for a teammate…'
-          )
+      open && started && createElement('div',{className:'qa-chat-box'},
+        createElement('div',{className:'qa-chat-header'},'Chat with Support'),
+        createElement('div',{className:'qa-chat-messages'},
+          messages.map((m,i)=> createElement('div',{key:i,className:`qa-chat-message ${m.sender}`},
+            m.message,
+            createElement('div',{className:'qa-chat-timestamp'}, m.created_at)
+          )),
+          lastIsUser && createElement('div',{className:'qa-chat-waiting'}, 'Waiting for reply…')
         ),
-
-        // Input
-        createElement('div', { className: 'qa-chat-input' },
-          createElement('input', {
-            type:        'text',
-            placeholder: 'Type a message…',
-            value:       input,
-            onChange:    e => setInput(e.target.value),
-            onKeyDown:   e => e.key === 'Enter' && sendMessage(),
+        createElement('div',{className:'qa-chat-input'},
+          createElement('input',{
+            type:'text',placeholder:'Type a message…',value:input,
+            onChange:e=>setInput(e.target.value),
+            onKeyDown:e=>e.key==='Enter'&&sendMessage()
           }),
-          createElement(
-            'button',
-            { onClick: sendMessage },
-            'Send'
-          )
+          createElement('button',{onClick:sendMessage},'Send')
         )
       )
     );
   }
 
-  // Mount on DOM ready
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded',()=>{
     const root = document.getElementById('qa-global-root');
-    if (root) render(createElement(GlobalWidget), root);
+    if(root) render(createElement(GlobalWidget), root);
   });
-
 })(window.wp);
