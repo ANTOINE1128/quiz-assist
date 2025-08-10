@@ -1,9 +1,8 @@
 <?php
 /**
  * Plugin Name: Quiz Assist
- * Description: AI-powered quiz & site assistant for FarhatLectures.
+ * Description: Quiz widget + site chat (guest/user) for FarhatLectures.
  * Version:     2.3
- * Author:      Antoine Makdessy
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
@@ -12,7 +11,44 @@ define( 'QA_DIR', __DIR__ . '/' );
 define( 'QA_URL', plugin_dir_url( __FILE__ ) );
 
 /**
- * Activation: create sessions + messages tables (with metadata)
+ * Helpers: detect LearnDash pages (Quiz / Topic)
+ */
+function qa_is_quiz_view() {
+    // 1) LearnDash helper if available
+    if ( function_exists( 'learndash_is_quiz_post' ) && is_singular() ) {
+        global $post;
+        if ( $post && learndash_is_quiz_post( $post->ID ) ) {
+            return true;
+        }
+    }
+    // 2) LD post type slug
+    if ( function_exists( 'learndash_get_post_type_slug' ) ) {
+        $quiz_pt = learndash_get_post_type_slug( 'quiz' ); // usually 'sfwd-quiz'
+        if ( $quiz_pt && is_singular( $quiz_pt ) ) return true;
+    }
+    // 3) Fallback
+    return is_singular( 'sfwd-quiz' );
+}
+
+function qa_is_topic_view() {
+    // 1) LearnDash helper if available
+    if ( function_exists( 'learndash_is_topic_post' ) && is_singular() ) {
+        global $post;
+        if ( $post && learndash_is_topic_post( $post->ID ) ) {
+            return true;
+        }
+    }
+    // 2) LD post type slug
+    if ( function_exists( 'learndash_get_post_type_slug' ) ) {
+        $topic_pt = learndash_get_post_type_slug( 'topic' ); // usually 'sfwd-topic'
+        if ( $topic_pt && is_singular( $topic_pt ) ) return true;
+    }
+    // 3) Fallback
+    return is_singular( 'sfwd-topic' );
+}
+
+/**
+ * Activation: create sessions + messages tables
  */
 register_activation_hook( __FILE__, 'qa_install' );
 function qa_install() {
@@ -22,7 +58,6 @@ function qa_install() {
     $msgs    = $wpdb->prefix . 'qa_chat_messages';
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-    // sessions table: user_id or guest fields
     dbDelta( "
     CREATE TABLE {$sess} (
       id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -35,7 +70,6 @@ function qa_install() {
     ) {$charset};
     " );
 
-    // messages table
     dbDelta( "
     CREATE TABLE {$msgs} (
       id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -50,7 +84,7 @@ function qa_install() {
     " );
 }
 
-/** Core includes (keep your existing files) */
+/** Includes */
 require_once QA_DIR . 'includes/utils.php';
 require_once QA_DIR . 'includes/settings.php';
 require_once QA_DIR . 'includes/admin-pages.php';
@@ -58,74 +92,76 @@ require_once QA_DIR . 'includes/api-quiz.php';
 require_once QA_DIR . 'api-chat.php';
 
 /**
- * Front-end assets
+ * Front-end assets (load per-page correctly)
  */
-add_action( 'wp_enqueue_scripts', function () {
+add_action( 'wp_enqueue_scripts', function() {
+    $is_quiz  = qa_is_quiz_view();
+    $is_topic = qa_is_topic_view();
 
-    // 1) Quiz widget
-    wp_enqueue_script(
-        'qa-quiz-widget',
-        QA_URL . 'assets/js/quiz-widget.js',
-        [],
-        filemtime( QA_DIR . 'assets/js/quiz-widget.js' ),
-        true
-    );
-    wp_enqueue_style(
-        'qa-quiz-widget-css',
-        QA_URL . 'assets/css/quiz-widget.css',
-        [],
-        filemtime( QA_DIR . 'assets/css/quiz-widget.css' )
-    );
-
-    $opts = get_option( 'quiz_assist_options', [] );
-    wp_localize_script(
-        'qa-quiz-widget',
-        'QA_Assist_Quiz_Settings',
-        [
-            'apiBase'     => rest_url( 'quiz-assist/v1' ),
-            'quizActions' => $opts['qa_quiz_actions'] ?? [],
-        ]
-    );
-
-    // 2) Global chat widget — DO NOT load on quiz pages
-    if ( strpos( $_SERVER['REQUEST_URI'] ?? '', '/quizzes/' ) === false ) {
-
+    // ========= QUIZ WIDGET (only on quiz pages) =========
+    if ( $is_quiz ) {
         wp_enqueue_script(
-            'qa-global-widget',
-            QA_URL . 'assets/js/global-widget.js',
-            ['wp-element'],
-            filemtime( QA_DIR . 'assets/js/global-widget.js' ),
-            true
+          'qa-quiz-widget',
+          QA_URL . 'assets/js/quiz-widget.js',
+          ['wp-element'],
+          filemtime( QA_DIR . 'assets/js/quiz-widget.js' ),
+          true
         );
 
         wp_enqueue_style(
-            'qa-global-widget-css',
-            QA_URL . 'assets/css/global-widget.css',
-            [],
-            filemtime( QA_DIR . 'assets/css/global-widget.css' )
+          'qa-quiz-widget-css',
+          QA_URL . 'assets/css/quiz-widget.css',
+          [],
+          filemtime( QA_DIR . 'assets/css/quiz-widget.css' )
+        );
+
+        $opts = get_option( 'quiz_assist_options', [] );
+        wp_localize_script(
+          'qa-quiz-widget',
+          'QA_Assist_Quiz_Settings',
+          [
+            'apiBase'     => rest_url( 'quiz-assist/v1' ),
+            'quizActions' => $opts['qa_quiz_actions'] ?? [],
+          ]
+        );
+    }
+
+    // ========= GLOBAL CHAT (everywhere EXCEPT quiz & topic pages) =========
+    if ( ! $is_quiz && ! $is_topic ) {
+        wp_enqueue_script(
+          'qa-global-widget',
+          QA_URL . 'assets/js/global-widget.js',
+          ['wp-element'],
+          filemtime( QA_DIR . 'assets/js/global-widget.js' ),
+          true
+        );
+
+        wp_enqueue_style(
+          'qa-global-widget-css',
+          QA_URL . 'assets/css/global-widget.css',
+          [],
+          filemtime( QA_DIR . 'assets/css/global-widget.css' )
         );
 
         wp_localize_script(
-  'qa-global-widget',
-  'QA_Assist_Global_SETTINGS',
-  [
-    'apiBase'        => rest_url( 'quiz-assist/v1' ),
-    'pollInterval'   => 2000,
-    'isUserLoggedIn' => is_user_logged_in(),
-    'currentUserName'=> is_user_logged_in() ? wp_get_current_user()->user_login : '',
-    'restNonce'      => wp_create_nonce('wp_rest'), // ← ADD THIS
-  ]
-);
+          'qa-global-widget',
+          'QA_Assist_Global_SETTINGS',
+          [
+            'apiBase'         => rest_url( 'quiz-assist/v1' ),
+            'pollInterval'    => 2000,
+            'isUserLoggedIn'  => is_user_logged_in(),
+            'currentUserName' => is_user_logged_in() ? wp_get_current_user()->user_login : '',
+            'restNonce'       => wp_create_nonce( 'wp_rest' ),
+          ]
+        );
     }
-});
+} );
 
 /**
- * Mount chat container (only where we enqueue it)
+ * Mount chat container only when NOT on quiz or topic pages
  */
-add_action( 'wp_footer', function () {
-    if ( strpos( $_SERVER['REQUEST_URI'] ?? '', '/quizzes/' ) !== false ) {
-        // quiz pages: no global chat
-        return;
+add_action( 'wp_footer', function(){
+    if ( ! qa_is_quiz_view() && ! qa_is_topic_view() ) {
+        echo '<div id="qa-global-root"></div>';
     }
-    echo '<div id="qa-global-root"></div>';
 } );
