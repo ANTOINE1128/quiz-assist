@@ -1,15 +1,10 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-/**
- * Register REST endpoints and ensure WP tries cookie+nonce auth
- * so get_current_user_id() works for logged-in users.
- */
 add_action( 'rest_api_init', function () {
 
     $permission = function( WP_REST_Request $req ) {
-        // Trigger WP auth (does not block guests)
-        rest_cookie_check_errors( $req );
+        rest_cookie_check_errors( $req ); // enable cookie/nonce auth
         return true;
     };
 
@@ -31,33 +26,49 @@ add_action( 'rest_api_init', function () {
         'permission_callback' => $permission,
     ] );
 
-    // Admin-only Sessions list
+    // Admin-only list
     register_rest_route( 'quiz-assist/v1', '/chat/sessions', [
         'methods'             => 'GET',
         'callback'            => 'qa_chat_get_sessions',
         'permission_callback' => function() { return current_user_can('manage_options'); },
     ] );
 
-    // FAQs for the widget
+    // Admin-only single session meta
+    register_rest_route( 'quiz-assist/v1', '/chat/session', [
+        'methods'             => 'GET',
+        'callback'            => 'qa_chat_get_session_meta',
+        'permission_callback' => function() { return current_user_can('manage_options'); },
+    ] );
+
+    // FAQs
     register_rest_route( 'quiz-assist/v1', '/chat/faqs', [
         'methods'             => 'GET',
         'callback'            => 'qa_chat_get_faqs',
         'permission_callback' => '__return_true',
     ] );
+
+    // Guest profile update
+    register_rest_route( 'quiz-assist/v1', '/chat/profile', [
+        'methods'             => 'POST',
+        'callback'            => 'qa_chat_update_profile',
+        'permission_callback' => $permission,
+    ] );
+
+    // NEW: Admin send (AJAX, no page reload)
+    register_rest_route( 'quiz-assist/v1', '/chat/admin/send', [
+        'methods'             => 'POST',
+        'callback'            => 'qa_chat_admin_send',
+        'permission_callback' => function() { return current_user_can('manage_options'); },
+    ] );
 } );
 
-/**
- * Create or reuse a chat session.
- */
+/** Create or reuse a chat session (same as before) */
 function qa_chat_start( WP_REST_Request $req ) {
     global $wpdb;
     $sess_table = $wpdb->prefix . 'qa_chat_sessions';
 
-    // Detect current user
     $user_id = get_current_user_id();
-
     if ( $user_id ) {
-        // Reuse newest session
         $existing_id = $wpdb->get_var( $wpdb->prepare(
             "SELECT id FROM {$sess_table} WHERE user_id=%d ORDER BY id DESC LIMIT 1",
             $user_id
@@ -65,7 +76,6 @@ function qa_chat_start( WP_REST_Request $req ) {
         if ( $existing_id ) {
             return [ 'session_id' => (string) $existing_id ];
         }
-
         $wpdb->insert( $sess_table, [
             'created_at'  => current_time( 'mysql' ),
             'user_id'     => $user_id,
@@ -73,30 +83,27 @@ function qa_chat_start( WP_REST_Request $req ) {
             'guest_email' => '',
             'guest_phone' => '',
         ], [ '%s','%d','%s','%s','%s' ] );
-
         return [ 'session_id' => (string) $wpdb->insert_id ];
     }
 
-    // Guest path
     $p = (array) $req->get_json_params();
     $guest_name  = sanitize_text_field( $p['guest_name']  ?? '' );
     $guest_email = sanitize_email(      $p['guest_email'] ?? '' );
     $guest_phone = sanitize_text_field( $p['guest_phone'] ?? '' );
 
     if ( $guest_name === '' || $guest_email === '' || $guest_phone === '' ) {
-        return new WP_Error(
-            'missing_fields',
-            'Guest name, email and phone are required.',
-            [ 'status' => 400 ]
-        );
+        return new WP_Error('missing_fields','Guest name, email and phone are required.', [ 'status' => 400 ]);
     }
 
-    // Reuse latest session by guest email if present
     $existing_id = $wpdb->get_var( $wpdb->prepare(
         "SELECT id FROM {$sess_table} WHERE user_id=0 AND guest_email=%s ORDER BY id DESC LIMIT 1",
         $guest_email
     ) );
     if ( $existing_id ) {
+        $wpdb->update( $sess_table, [
+            'guest_name'  => $guest_name,
+            'guest_phone' => $guest_phone,
+        ], [ 'id' => $existing_id ], [ '%s','%s' ], [ '%d' ] );
         return [ 'session_id' => (string) $existing_id ];
     }
 
@@ -111,7 +118,7 @@ function qa_chat_start( WP_REST_Request $req ) {
     return [ 'session_id' => (string) $wpdb->insert_id ];
 }
 
-/** Send a message. Refuses if session doesn’t exist. */
+/** Send a message (user) */
 function qa_chat_send( WP_REST_Request $req ) {
     global $wpdb;
 
@@ -144,7 +151,7 @@ function qa_chat_send( WP_REST_Request $req ) {
     return [ 'success' => true ];
 }
 
-/** Get messages for a session. */
+/** Get messages */
 function qa_chat_get_messages( WP_REST_Request $req ) {
     global $wpdb;
 
@@ -179,11 +186,10 @@ function qa_chat_get_messages( WP_REST_Request $req ) {
             'created_at' => $r->created_at,
         ];
     }
-
     return [ 'messages' => $out ];
 }
 
-/** Sessions list for the admin view (joined with wp_users) */
+/** Sessions list (admin) */
 function qa_chat_get_sessions( WP_REST_Request $req ) {
     global $wpdb;
 
@@ -224,11 +230,40 @@ function qa_chat_get_sessions( WP_REST_Request $req ) {
             'unread_count'      => (int) $r->unread_count,
         ];
     }
-
     return [ 'sessions' => $out ];
 }
 
-/** Return FAQs */
+/** Single session meta (admin) */
+function qa_chat_get_session_meta( WP_REST_Request $req ) {
+    global $wpdb;
+    $id = intval( $req->get_param('session_id') ?? 0 );
+    if ( ! $id ) {
+        return new WP_Error( 'bad_request', 'session_id required', [ 'status'=>400 ] );
+    }
+    $sess  = $wpdb->prefix . 'qa_chat_sessions';
+    $users = $wpdb->users;
+    $row = $wpdb->get_row( $wpdb->prepare("
+        SELECT s.id, s.user_id, s.guest_name, s.guest_email, s.guest_phone, u.user_login, u.user_email
+        FROM {$sess} s
+        LEFT JOIN {$users} u ON u.ID = s.user_id
+        WHERE s.id = %d
+        LIMIT 1
+    ", $id) );
+    if ( ! $row ) {
+        return new WP_Error( 'not_found', 'Session not found', [ 'status'=>404 ] );
+    }
+    return [ 'session' => [
+        'id'          => (int)$row->id,
+        'user_id'     => (int)$row->user_id,
+        'guest_name'  => $row->guest_name,
+        'guest_email' => $row->guest_email,
+        'guest_phone' => $row->guest_phone,
+        'user_login'  => $row->user_login,
+        'user_email'  => $row->user_email,
+    ] ];
+}
+
+/** FAQs */
 function qa_chat_get_faqs( WP_REST_Request $req ) {
   $opts = get_option( 'quiz_assist_options', [] );
   $faqs = $opts['qa_faqs'] ?? [];
@@ -241,4 +276,73 @@ function qa_chat_get_faqs( WP_REST_Request $req ) {
     ];
   }
   return [ 'faqs' => $out ];
+}
+
+/** Guest profile update */
+function qa_chat_update_profile( WP_REST_Request $req ) {
+    global $wpdb;
+    $p          = (array) $req->get_json_params();
+    $session_id = intval( $p['session_id'] ?? 0 );
+    $name       = sanitize_text_field( $p['guest_name']  ?? '' );
+    $email      = sanitize_email(      $p['guest_email'] ?? '' );
+    $phone      = sanitize_text_field( $p['guest_phone'] ?? '' );
+
+    if ( ! $session_id || $name === '' || $email === '' || $phone === '' ) {
+        return new WP_Error('bad_request','All fields are required.', ['status'=>400]);
+    }
+
+    $sess_table = $wpdb->prefix . 'qa_chat_sessions';
+    $row = $wpdb->get_row( $wpdb->prepare("SELECT id,user_id FROM {$sess_table} WHERE id=%d", $session_id) );
+    if ( ! $row ) {
+        return new WP_Error('not_found','Session not found.', ['status'=>404]);
+    }
+    if ( intval($row->user_id) !== 0 ) {
+        return new WP_Error('forbidden','Only guest sessions can update profile.', ['status'=>403]);
+    }
+
+    $wpdb->update( $sess_table, [
+        'guest_name'  => $name,
+        'guest_email' => $email,
+        'guest_phone' => $phone,
+    ], [ 'id' => $session_id ], [ '%s','%s','%s' ], [ '%d' ] );
+
+    return [ 'success' => true ];
+}
+
+/** NEW: Admin send message (AJAX) */
+function qa_chat_admin_send( WP_REST_Request $req ) {
+    global $wpdb;
+
+    $p          = (array) $req->get_json_params();
+    $session_id = intval( $p['session_id'] ?? 0 );
+    $message    = sanitize_text_field( $p['message'] ?? '' );
+
+    if ( ! $session_id || $message === '' ) {
+        return new WP_Error( 'invalid_data', 'Session ID and message required.', [ 'status' => 400 ] );
+    }
+
+    $sess_table = $wpdb->prefix . 'qa_chat_sessions';
+    $exists     = $wpdb->get_var( $wpdb->prepare(
+        "SELECT id FROM {$sess_table} WHERE id=%d LIMIT 1",
+        $session_id
+    ) );
+    if ( ! $exists ) {
+        return new WP_Error( 'no_session', 'Session not found or closed.', [ 'status' => 410 ] );
+    }
+
+    $now = current_time('mysql');
+    $msgs_table = $wpdb->prefix . 'qa_chat_messages';
+    $wpdb->insert( $msgs_table, [
+        'session_id' => $session_id,
+        'sender'     => 'admin',
+        'message'    => $message,
+        'created_at' => $now,
+        'is_read'    => 1,
+    ], [ '%d','%s','%s','%s','%d' ] );
+
+    return [ 'success' => true, 'message' => [
+        'sender' => 'admin',
+        'message'=> $message,
+        'created_at' => $now,
+    ] ];
 }

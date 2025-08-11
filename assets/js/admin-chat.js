@@ -15,18 +15,45 @@
     });
   }
 
+  function apiPost(path, body) {
+    return fetch(`${apiBase}${path}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-WP-Nonce': restNonce || '',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(body || {})
+    });
+  }
+
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, m =>
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])
     );
   }
 
-  /** ----- Messages view ----- */
+  let visitorName = 'Visitor';
+
+  // Fetch session meta to label "user" messages with real name/username
+  function loadSessionMeta() {
+    if (!parseInt(sessionId, 10)) return Promise.resolve();
+    return apiGet(`/chat/session?session_id=${sessionId}`)
+      .then(r => r.json())
+      .then(data => {
+        const s = data.session || {};
+        visitorName = (parseInt(s.user_id,10) > 0)
+          ? (s.user_login || 'User')
+          : (s.guest_name || 'Visitor');
+      }).catch(()=>{});
+  }
+
   function renderMessages(container, msgs) {
     const frag = document.createDocumentFragment();
     msgs.forEach(m => {
       const p = document.createElement('p');
-      const who   = m.sender === 'user' ? 'Visitor' : 'Admin';
+      const who   = m.sender === 'user' ? visitorName : 'Admin';
       const cls   = m.sender === 'user' ? 'user' : 'admin';
       p.className = `qa-line ${cls}`;
       p.innerHTML =
@@ -39,23 +66,48 @@
     container.scrollTop = container.scrollHeight;
   }
 
+  function refreshMessages(container) {
+    apiGet(`/chat/messages?session_id=${sessionId}`)
+      .then(r => r.json())
+      .then(data => renderMessages(container, data.messages || []))
+      .catch(()=>{});
+  }
+
   function startMessagePolling() {
     const container = document.getElementById('qa-chat-messages');
     if (!container) return;
-    let lastJSON = '';
-    const tick = () => {
-      apiGet(`/chat/messages?session_id=${sessionId}`)
-        .then(r => r.json())
-        .then(data => {
-          const json = JSON.stringify(data.messages || []);
-          if (json !== lastJSON) {
-            renderMessages(container, data.messages || []);
-            lastJSON = json;
-          }
-        }).catch(()=>{});
-    };
-    tick();
-    setInterval(tick, pollInterval || 1200);
+
+    loadSessionMeta().then(() => refreshMessages(container));
+    setInterval(() => refreshMessages(container), pollInterval || 1200);
+
+    // Hook AJAX submit for admin reply (no reload)
+    const form = document.getElementById('qa-admin-reply-form');
+    if (form) {
+      form.addEventListener('submit', function(e){
+        e.preventDefault();
+        const ta  = form.querySelector('textarea[name="admin_message"]');
+        const btn = form.querySelector('input[type="submit"], button[type="submit"]') || form.querySelector('input[type="submit"]');
+        const text = (ta.value || '').trim();
+        if (!text) return;
+
+        const orig = btn ? (btn.value || btn.textContent) : '';
+        if (btn) { btn.disabled = true; btn.value = 'Sending…'; if (btn.textContent) btn.textContent = 'Sending…'; }
+
+        apiPost('/chat/admin/send', { session_id: Number(sessionId), message: text })
+          .then(async r => {
+            const j = await r.json().catch(()=>({}));
+            if (!r.ok) throw new Error(j?.message || 'Failed to send');
+            ta.value = '';
+            refreshMessages(container);
+          })
+          .catch(err => {
+            alert(err.message || 'Failed to send');
+          })
+          .finally(() => {
+            if (btn) { btn.disabled = false; if (btn.value) btn.value = orig; if (btn.textContent) btn.textContent = orig; }
+          });
+      });
+    }
   }
 
   /** ----- Sessions list ----- */
@@ -99,18 +151,11 @@
     const table = document.getElementById('qa-chat-sessions-table');
     if (!table) return;
     const tbody = table.querySelector('tbody');
-    let lastJSON = '';
     const tick = () => {
       apiGet('/chat/sessions')
         .then(r => r.json())
-        .then(data => {
-          const arr = data.sessions || [];
-          const json = JSON.stringify(arr);
-          if (json !== lastJSON) {
-            renderSessions(tbody, arr);
-            lastJSON = json;
-          }
-        }).catch(()=>{});
+        .then(data => renderSessions(tbody, data.sessions || []))
+        .catch(()=>{});
     };
     tick();
     setInterval(tick, pollInterval || 1500);

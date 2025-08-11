@@ -43,7 +43,7 @@ function qa_settings_init() {
     'qa_section'
   );
 
-  // 4) Global-chat quick replies
+  // 4) Global-chat quick replies (Label + Message only)
   add_settings_field(
     'qa_global_actions',
     'Global Chat Quick-Replies',
@@ -74,7 +74,7 @@ function qa_render_text( $args ) {
   );
 }
 
-/** Model select (fetched from OpenAI when key present) */
+/** Model select */
 function qa_render_model() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $current = $opts['qa_model'] ?? 'gpt-4';
@@ -114,7 +114,7 @@ function qa_render_model() {
   echo '</select>';
 }
 
-/** Quiz-widget actions repeater */
+/** Quiz-widget actions repeater (unchanged) */
 function qa_render_actions() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $actions = $opts['qa_quiz_actions'] ?? [];
@@ -188,23 +188,22 @@ function qa_render_actions() {
   echo '</div>';
 }
 
-/** Global-chat quick replies repeater */
+/** Global-chat quick replies (Label + Message only) */
 function qa_render_global_actions() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $actions = $opts['qa_global_actions'] ?? [];
   ?>
   <div class="qa-card">
-    <p class="description">Optional: quick-reply buttons for the global chat.</p>
+    <p class="description">Quick reply buttons for the global chat. Clicking a button sends the <em>Message</em> as if the user typed it.</p>
     <table id="qa-global-actions-table" class="widefat striped">
       <thead>
-        <tr><th>Label</th><th>System Prompt</th><th>User Prompt</th><th>Remove</th></tr>
+        <tr><th style="width:220px;">Label</th><th>Message</th><th style="width:90px;">Remove</th></tr>
       </thead>
       <tbody>
         <?php foreach( $actions as $i => $a ): ?>
           <tr>
             <td><input name="quiz_assist_options[qa_global_actions][<?= esc_attr($i) ?>][label]"
                        value="<?= esc_attr($a['label'] ?? '') ?>"/></td>
-            <td><textarea rows="2" name="quiz_assist_options[qa_global_actions][<?= esc_attr($i) ?>][sys]"><?= esc_textarea($a['sys'] ?? '') ?></textarea></td>
             <td><textarea rows="2" name="quiz_assist_options[qa_global_actions][<?= esc_attr($i) ?>][user]"><?= esc_textarea($a['user'] ?? '') ?></textarea></td>
             <td><button class="button qa-global-remove">Delete</button></td>
           </tr>
@@ -216,7 +215,6 @@ function qa_render_global_actions() {
     <template id="qa-global-row-tpl">
       <tr>
         <td><input/></td>
-        <td><textarea rows="2"></textarea></td>
         <td><textarea rows="2"></textarea></td>
         <td><button class="button qa-global-remove">Delete</button></td>
       </tr>
@@ -230,8 +228,7 @@ function qa_render_global_actions() {
       const idx = $tb.children().length;
       const $row = $($('#qa-global-row-tpl').html());
       $row.find('input').attr('name',`quiz_assist_options[qa_global_actions][${idx}][label]`);
-      $row.find('textarea').eq(0).attr('name',`quiz_assist_options[qa_global_actions][${idx}][sys]`);
-      $row.find('textarea').eq(1).attr('name',`quiz_assist_options[qa_global_actions][${idx}][user]`);
+      $row.find('textarea').eq(0).attr('name',`quiz_assist_options[qa_global_actions][${idx}][user]`);
       $tb.append($row);
     });
     $(document).on('click','.qa-global-remove',function(e){
@@ -239,8 +236,7 @@ function qa_render_global_actions() {
       $(this).closest('tr').remove();
       $tb.children().each(function(i,tr){
         $(tr).find('input').attr('name',`quiz_assist_options[qa_global_actions][${i}][label]`);
-        $(tr).find('textarea').eq(0).attr('name',`quiz_assist_options[qa_global_actions][${i}][sys]`);
-        $(tr).find('textarea').eq(1).attr('name',`quiz_assist_options[qa_global_actions][${i}][user]`);
+        $(tr).find('textarea').eq(0).attr('name',`quiz_assist_options[qa_global_actions][${i}][user]`);
       });
     });
   })(jQuery);
@@ -248,14 +244,13 @@ function qa_render_global_actions() {
   <?php
 }
 
-/** FAQs repeater */
+/** FAQs repeater (unchanged) */
 function qa_render_faqs() {
   $opts = get_option( 'quiz_assist_options', [] );
   $faqs = $opts['qa_faqs'] ?? [];
   ?>
   <div class="qa-card">
-    <p class="description">Add questions and answers. These appear in the Global Chat “Resources” as a compact accordion.</p>
-
+    <p class="description">Add questions and answers. These appear in the Global Chat “Resources” accordion.</p>
     <table id="qa-faqs-table" class="widefat striped">
       <thead>
         <tr>
@@ -284,9 +279,7 @@ function qa_render_faqs() {
         <?php endforeach; ?>
       </tbody>
     </table>
-
     <p><button id="qa-faqs-add" class="button">+ Add FAQ</button></p>
-
     <template id="qa-faqs-row-tpl">
       <tr>
         <td><input type="text" class="regular-text" /></td>
@@ -295,7 +288,6 @@ function qa_render_faqs() {
       </tr>
     </template>
   </div>
-
   <script>
   (function($){
     const $tbody = $('#qa-faqs-table tbody');
@@ -327,6 +319,7 @@ function qa_sanitize_options( $input ) {
   $clean['qa_openai_key']   = sanitize_text_field( trim( $input['qa_openai_key'] ?? '' ) );
   $clean['qa_model']        = sanitize_text_field( trim( $input['qa_model'] ?? 'gpt-4' ) );
 
+  // quiz actions
   $clean['qa_quiz_actions'] = [];
   if ( ! empty( $input['qa_quiz_actions'] ) && is_array( $input['qa_quiz_actions'] ) ) {
     foreach ( $input['qa_quiz_actions'] as $act ) {
@@ -339,18 +332,19 @@ function qa_sanitize_options( $input ) {
     }
   }
 
+  // global quick replies: label + user(message)
   $clean['qa_global_actions'] = [];
   if ( ! empty( $input['qa_global_actions'] ) && is_array( $input['qa_global_actions'] ) ) {
     foreach ( $input['qa_global_actions'] as $act ) {
       $lab = sanitize_text_field( trim( $act['label'] ?? '' ) );
-      $sys = wp_kses_post(      trim( $act['sys']   ?? '' ) );
       $usr = wp_kses_post(      trim( $act['user']  ?? '' ) );
-      if ( $lab && $sys && $usr ) {
-        $clean['qa_global_actions'][] = [ 'label'=>$lab, 'sys'=>$sys, 'user'=>$usr ];
+      if ( $lab && $usr ) {
+        $clean['qa_global_actions'][] = [ 'label'=>$lab, 'user'=>$usr ];
       }
     }
   }
 
+  // faqs
   $clean['qa_faqs'] = [];
   if ( ! empty( $input['qa_faqs'] ) && is_array( $input['qa_faqs'] ) ) {
     foreach ( $input['qa_faqs'] as $f ) {

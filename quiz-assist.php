@@ -2,14 +2,14 @@
 /**
  * Plugin Name: Quiz Assist
  * Description: Quiz widget + site chat (guest/user) for FarhatLectures.
- * Version:     2.4
+ * Version:     2.5
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 define( 'QA_DIR', __DIR__ . '/' );
 define( 'QA_URL', plugin_dir_url( __FILE__ ) );
-define( 'QA_VER', '2.4' );
+define( 'QA_VER', '2.5' );
 
 /**
  * Helpers: detect LearnDash pages (Quiz / Topic)
@@ -134,6 +134,7 @@ add_action( 'wp_enqueue_scripts', function() {
           filemtime( QA_DIR . 'assets/css/global-widget.css' )
         );
 
+        $opts = get_option( 'quiz_assist_options', [] );
         wp_localize_script(
           'qa-global-widget',
           'QA_Assist_Global_SETTINGS',
@@ -143,6 +144,8 @@ add_action( 'wp_enqueue_scripts', function() {
             'isUserLoggedIn'  => is_user_logged_in(),
             'currentUserName' => is_user_logged_in() ? wp_get_current_user()->user_login : '',
             'restNonce'       => wp_create_nonce( 'wp_rest' ),
+            // NEW: pass quick replies
+            'globalActions'   => $opts['qa_global_actions'] ?? [],
           ]
         );
     }

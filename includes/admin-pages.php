@@ -1,76 +1,31 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-/**
- * Admin menu
- */
+/** Admin menu... (unchanged) */
 add_action( 'admin_menu', function() {
     $parent = 'quiz_assist';
 
-    add_menu_page(
-        'Quiz Assist',
-        'Quiz Assist',
-        'manage_options',
-        $parent,
-        'qa_render_settings_page',
-        'dashicons-format-chat',
-        80
-    );
-
-    add_submenu_page(
-        $parent,
-        'Settings',
-        'Settings',
-        'manage_options',
-        $parent,
-        'qa_render_settings_page'
-    );
-
-    add_submenu_page(
-        $parent,
-        'Chats',
-        'Chats',
-        'manage_options',
-        'quiz_assist_chats',
-        'qa_render_chats_page'
-    );
+    add_menu_page( 'Quiz Assist','Quiz Assist','manage_options',$parent,'qa_render_settings_page','dashicons-format-chat',80 );
+    add_submenu_page( $parent,'Settings','Settings','manage_options',$parent,'qa_render_settings_page' );
+    add_submenu_page( $parent,'Chats','Chats','manage_options','quiz_assist_chats','qa_render_chats_page' );
 });
 
-/**
- * Enqueue admin assets
- */
 add_action( 'admin_enqueue_scripts', function() {
     $page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
 
     if ( $page === 'quiz_assist' ) {
         if ( file_exists( QA_DIR . 'assets/css/admin.css' ) ) {
-            wp_enqueue_style(
-                'qa-admin-css',
-                QA_URL . 'assets/css/admin.css',
-                [],
-                filemtime( QA_DIR . 'assets/css/admin.css' )
-            );
+            wp_enqueue_style( 'qa-admin-css', QA_URL . 'assets/css/admin.css', [], filemtime( QA_DIR . 'assets/css/admin.css' ) );
         }
         return;
     }
 
     if ( $page === 'quiz_assist_chats' ) {
         if ( file_exists( QA_DIR . 'assets/css/admin-chat.css' ) ) {
-            wp_enqueue_style(
-                'qa-admin-chat-css',
-                QA_URL . 'assets/css/admin-chat.css',
-                [],
-                filemtime( QA_DIR . 'assets/css/admin-chat.css' )
-            );
+            wp_enqueue_style( 'qa-admin-chat-css', QA_URL . 'assets/css/admin-chat.css', [], filemtime( QA_DIR . 'assets/css/admin-chat.css' ) );
         }
         if ( file_exists( QA_DIR . 'assets/js/admin-chat.js' ) ) {
-            wp_enqueue_script(
-                'qa-admin-chat-js',
-                QA_URL . 'assets/js/admin-chat.js',
-                [],
-                filemtime( QA_DIR . 'assets/js/admin-chat.js' ),
-                true
-            );
+            wp_enqueue_script( 'qa-admin-chat-js', QA_URL . 'assets/js/admin-chat.js', [], filemtime( QA_DIR . 'assets/js/admin-chat.js' ), true );
             wp_localize_script( 'qa-admin-chat-js', 'QA_ADMIN_CHAT', [
                 'apiBase'        => rest_url('quiz-assist/v1'),
                 'sessionId'      => intval( $_GET['session_id'] ?? 0 ),
@@ -84,7 +39,7 @@ add_action( 'admin_enqueue_scripts', function() {
     }
 });
 
-/** Settings page */
+/** Settings page (unchanged) */
 function qa_render_settings_page() { ?>
   <div class="wrap">
     <h1>Quiz Assist Settings</h1>
@@ -108,7 +63,6 @@ function qa_render_chats_page() {
     echo '<div class="wrap"><h1>Quiz Assist Chats</h1>';
 
     if ( $session_id ) {
-        // Session meta
         $session = $wpdb->get_row( $wpdb->prepare(
             "SELECT user_id, guest_name, guest_email, guest_phone, created_at
              FROM {$sess_table}
@@ -144,9 +98,9 @@ function qa_render_chats_page() {
         // Messages container (JS populates)
         echo '<div id="qa-chat-messages" class="qa-admin-chat-box"></div>';
 
-        // Reply form
+        // Reply form — JS intercepts submit to avoid reload (AJAX)
         ?>
-        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" class="qa-reply-form">
+        <form id="qa-admin-reply-form" method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" class="qa-reply-form">
           <input type="hidden" name="action" value="qa_send_admin_message">
           <input type="hidden" name="session_id" value="<?php echo esc_attr( $session_id ); ?>">
           <textarea name="admin_message" rows="3" placeholder="Type reply…" required></textarea>
@@ -173,7 +127,7 @@ function qa_render_chats_page() {
     echo '</div>';
 }
 
-/** Admin: send reply */
+/** Fallback admin_post (kept for non-JS situations) */
 add_action( 'admin_post_qa_send_admin_message', function(){
     if ( ! current_user_can( 'manage_options' ) ) {
         wp_die( 'Unauthorized', '', [ 'response' => 403 ] );
@@ -198,7 +152,7 @@ add_action( 'admin_post_qa_send_admin_message', function(){
     exit;
 });
 
-/** Admin: delete session (messages then session) */
+/** Admin: delete session (unchanged) */
 add_action( 'admin_post_qa_delete_chat_session', function(){
     if ( ! current_user_can('manage_options' ) ) {
         wp_die( 'Unauthorized', '', [ 'response' => 403 ] );

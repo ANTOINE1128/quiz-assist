@@ -9,7 +9,7 @@
 
 /* Panel */
 .qa-panel {
-  position: fixed; right: 20px; bottom: 90px; width: 360px; max-width: calc(100vw - 40px);
+  position: fixed; right: 20px; bottom: 90px; width: 400px; max-width: calc(100vw - 40px);
   background:#fff; border-radius: 16px; box-shadow: 0 24px 48px rgba(0,0,0,0.2); overflow:hidden;
 }
 
@@ -23,11 +23,14 @@
 .qa-close:hover { opacity: 1; }
 
 /* Body */
-.qa-body { max-height: 60vh; overflow: auto; padding: 12px; background:#fafafa; }
+.qa-body { max-height: 65vh; overflow: auto; padding: 12px; background:#fafafa; }
 
 /* Cards */
 .qa-card { background:#fff; border-radius:12px; padding:12px; box-shadow: 0 1px 0 rgba(0,0,0,0.05); margin-bottom:10px; }
 .qa-section-title { font-weight:700; margin-bottom:8px; }
+
+/* Notes */
+.qa-note { font-size: 12px; color:#475569; margin-top:6px; }
 
 /* Action card */
 .qa-action { display:flex; align-items:center; justify-content:space-between; }
@@ -47,13 +50,14 @@
 
 .qa-error { color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; padding:8px 10px; border-radius:8px; font-size:13px; }
 
-/* FAQ list */
+/* FAQ list — ALWAYS visible text (override themes) */
 .qa-faq-list { display:flex; flex-direction:column; gap:8px; }
 .qa-faq-item {
   display:flex; align-items:center; justify-content:space-between; gap:8px;
-  border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; text-decoration:none; color:#111827;
-  background:#fff;
+  border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; text-decoration:none;
+  background:#fff; color:#111827;
 }
+.qa-faq-toggle { color:#111827 !important; }
 .qa-faq-item:hover { background:#f9fafb; }
 .qa-faq-arrow { opacity:.5; }
 
@@ -70,6 +74,15 @@
 .qa-chat-input button { background:#0b5cff; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer; }
 .qa-chat-error { margin-top:8px; }
 
+/* Quick replies */
+.qa-quick { display:flex; flex-wrap:wrap; gap:6px; }
+.qa-quick-row { padding:6px 4px; }
+.qa-chip-btn {
+  border:1px solid #dbeafe; background:#eff6ff; color:#1e40af; border-radius:9999px; padding:6px 10px; cursor:pointer; font-size:12px;
+}
+.qa-chip-btn:hover { background:#dbeafe; }
+.qa-chip-btn.disabled { opacity:.6; cursor:not-allowed; pointer-events:none; }
+
 /* Bottom nav */
 .qa-nav { display:flex; border-top:1px solid #eee; background:#fff; }
 .qa-tab {
@@ -78,3 +91,6 @@
 }
 .qa-tab.active { color:#0b5cff; }
 .qa-tab:disabled { opacity:.5; cursor:not-allowed; }
+
+/* Profile */
+.qa-profile .qa-profile-actions { display:flex; justify-content:flex-end; margin-top:8px; }

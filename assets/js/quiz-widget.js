@@ -150,7 +150,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', function(){
-    // Mount into a detached container so styling is independent
     const mountId = 'qa-quiz-widget-root';
     let mount = document.getElementById(mountId);
     if (!mount) {

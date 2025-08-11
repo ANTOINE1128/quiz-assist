@@ -75,7 +75,6 @@ function qa_ask_bot( WP_REST_Request $req ) {
       return new WP_Error('no_api_key','OpenAI API key not set',['status'=>500]);
     }
 
-    // build lists
     $all = $crt = $inc = '';
     foreach($answers as $i=>$a){
       $n = $i+1;
@@ -85,7 +84,6 @@ function qa_ask_bot( WP_REST_Request $req ) {
       else                      $inc .= "{$n}. {$t}\n";
     }
 
-    // interpolate user template
     $user_msg = strtr($usr_tpl,[
       '{question}'  => $q,
       '{list}'      => $all,
@@ -96,7 +94,6 @@ function qa_ask_bot( WP_REST_Request $req ) {
     qa_log("BTN[{$label}] SYS ► {$sys_tpl}");
     qa_log("BTN[{$label}] USR ► {$user_msg}");
 
-    // Call OpenAI
     $resp = wp_remote_post('https://api.openai.com/v1/chat/completions',[
       'timeout'=>30,
       'headers'=>[
