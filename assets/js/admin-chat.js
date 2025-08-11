@@ -15,16 +15,23 @@
     });
   }
 
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, m =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])
+    );
+  }
+
   /** ----- Messages view ----- */
   function renderMessages(container, msgs) {
     const frag = document.createDocumentFragment();
     msgs.forEach(m => {
       const p = document.createElement('p');
       const who   = m.sender === 'user' ? 'Visitor' : 'Admin';
-      const color = m.sender === 'user' ? '#000' : '#0052cc';
+      const cls   = m.sender === 'user' ? 'user' : 'admin';
+      p.className = `qa-line ${cls}`;
       p.innerHTML =
-        `<strong style="color:${color}">${who}:</strong> ${m.message}
-         <em style="font-size:10px;color:#666;">${m.created_at}</em>`;
+        `<strong>${escapeHtml(who)}:</strong> ${escapeHtml(m.message)}
+         <span class="qa-ts">${escapeHtml(m.created_at)}</span>`;
       frag.appendChild(p);
     });
     container.innerHTML = '';
@@ -54,7 +61,6 @@
   /** ----- Sessions list ----- */
   function detailsCell(s) {
     if (parseInt(s.user_id, 10) > 0) {
-      // WordPress user
       const u = (s.user_login || '—');
       const e = (s.user_email || '—');
       return (
@@ -62,7 +68,6 @@
         `<div class="qa-user-meta"><span>Username: ${escapeHtml(u)}</span><span>Email: ${escapeHtml(e)}</span></div>`
       );
     }
-    // Guest
     const n = s.guest_name  || '—';
     const e = s.guest_email || '—';
     const p = s.guest_phone || '—';
@@ -72,24 +77,18 @@
     );
   }
 
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, m =>
-      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])
-    );
-  }
-
   function renderSessions(tbody, sessions) {
     let html = '';
     sessions.forEach(s => {
       const view = `admin.php?page=quiz_assist_chats&session_id=${s.id}`;
       const del  = `${adminPostBase}?action=${encodeURIComponent(deleteAction)}&session_id=${s.id}&_wpnonce=${encodeURIComponent(deleteNonce)}`;
       html += `<tr>
-        <td>#${s.id}${s.unread_count>0?` <span class="qa-unread-badge">${s.unread_count}</span>`:''}</td>
+        <td>#${s.id}${s.unread_count>0?` <span class="unread-badge">${s.unread_count}</span>`:''}</td>
         <td>${detailsCell(s)}</td>
         <td>${s.last_message_time ? escapeHtml(s.last_message_time) : ''}</td>
-        <td class="col-actions">
+        <td class="qa-actions">
           <a class="button button-small" href="${view}">View</a>
-          <a class="button button-small qa-btn-delete" href="${del}">Delete</a>
+          <a class="button button-small button-link-delete" href="${del}">Delete</a>
         </td>
       </tr>`;
     });

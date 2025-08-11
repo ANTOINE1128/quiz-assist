@@ -1,4 +1,6 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) exit;
+
 add_action('rest_api_init', function(){
     register_rest_route('quiz-assist/v1','/question/(?P<id>\d+)',[
       'methods'             => 'GET',
@@ -36,7 +38,7 @@ function qa_get_question( WP_REST_Request $req ) {
         if(stripos($k,'answer')!==false) $txt = $v;
         if(stripos($k,'correct')!==false && $v) $crt = true;
       }
-      $out[] = ['text'=>$txt,'correct'=>$crt];
+      $out[] = ['text'=>sanitize_text_field($txt),'correct'=> (bool) $crt];
     }
     return ['question'=>$row->question,'answers'=>$out];
 }
@@ -58,7 +60,6 @@ function qa_ask_bot( WP_REST_Request $req ) {
     $sys_tpl = trim($actions[$idx]['sys'] ?? '');
     $usr_tpl = trim($actions[$idx]['user'] ?? '');
 
-    // 1) Validate templates
     if ( $sys_tpl === '' || $usr_tpl === '' ) {
         qa_log("ERROR ► Missing sys/user template for action #{$idx}");
         return new WP_Error(
@@ -118,13 +119,11 @@ function qa_ask_bot( WP_REST_Request $req ) {
       return new WP_Error('openai_fail','OpenAI error',['status'=>500]);
     }
 
-    $body = wp_remote_retrieve_body($resp);
+    $body  = wp_remote_retrieve_body($resp);
     qa_log("RAW OPENAI ► " . $body);
-
-    $j    = json_decode($body,true);
+    $j     = json_decode($body,true);
     $reply = $j['choices'][0]['message']['content'] ?? '';
 
-    // 2) Validate reply
     if ( trim($reply) === '' ) {
       qa_log("EMPTY_REPLY ► action={$idx} body={$body}");
       return new WP_Error(

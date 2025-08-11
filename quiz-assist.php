@@ -2,48 +2,39 @@
 /**
  * Plugin Name: Quiz Assist
  * Description: Quiz widget + site chat (guest/user) for FarhatLectures.
- * Version:     2.3
+ * Version:     2.4
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 define( 'QA_DIR', __DIR__ . '/' );
 define( 'QA_URL', plugin_dir_url( __FILE__ ) );
+define( 'QA_VER', '2.4' );
 
 /**
  * Helpers: detect LearnDash pages (Quiz / Topic)
  */
 function qa_is_quiz_view() {
-    // 1) LearnDash helper if available
     if ( function_exists( 'learndash_is_quiz_post' ) && is_singular() ) {
         global $post;
-        if ( $post && learndash_is_quiz_post( $post->ID ) ) {
-            return true;
-        }
+        if ( $post && learndash_is_quiz_post( $post->ID ) ) return true;
     }
-    // 2) LD post type slug
     if ( function_exists( 'learndash_get_post_type_slug' ) ) {
-        $quiz_pt = learndash_get_post_type_slug( 'quiz' ); // usually 'sfwd-quiz'
+        $quiz_pt = learndash_get_post_type_slug( 'quiz' );
         if ( $quiz_pt && is_singular( $quiz_pt ) ) return true;
     }
-    // 3) Fallback
     return is_singular( 'sfwd-quiz' );
 }
 
 function qa_is_topic_view() {
-    // 1) LearnDash helper if available
     if ( function_exists( 'learndash_is_topic_post' ) && is_singular() ) {
         global $post;
-        if ( $post && learndash_is_topic_post( $post->ID ) ) {
-            return true;
-        }
+        if ( $post && learndash_is_topic_post( $post->ID ) ) return true;
     }
-    // 2) LD post type slug
     if ( function_exists( 'learndash_get_post_type_slug' ) ) {
-        $topic_pt = learndash_get_post_type_slug( 'topic' ); // usually 'sfwd-topic'
+        $topic_pt = learndash_get_post_type_slug( 'topic' );
         if ( $topic_pt && is_singular( $topic_pt ) ) return true;
     }
-    // 3) Fallback
     return is_singular( 'sfwd-topic' );
 }
 
@@ -89,7 +80,7 @@ require_once QA_DIR . 'includes/utils.php';
 require_once QA_DIR . 'includes/settings.php';
 require_once QA_DIR . 'includes/admin-pages.php';
 require_once QA_DIR . 'includes/api-quiz.php';
-require_once QA_DIR . 'api-chat.php';
+require_once QA_DIR . 'includes/api-chat.php';
 
 /**
  * Front-end assets (load per-page correctly)

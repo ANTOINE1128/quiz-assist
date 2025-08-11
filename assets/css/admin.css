@@ -9,9 +9,7 @@
   margin-bottom: 24px;
 }
 
-.qa-placeholders {
-  margin-bottom: 12px;
-}
+.qa-placeholders { margin-bottom: 12px; }
 
 .qa-chip {
   display: inline-block;
@@ -24,34 +22,16 @@
   margin-right: 6px;
 }
 
-#qa-actions-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 8px;
-}
-
+#qa-actions-table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
 #qa-actions-table th {
-  background: #f7fafc;
-  color: #2d3748;
-  padding: 8px 12px;
-  font-weight: 600;
+  background: #f7fafc; color: #2d3748; padding: 8px 12px; font-weight: 600;
 }
-
 #qa-actions-table td {
-  background: #ffffff;
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
+  background: #ffffff; padding: 8px 12px; border: 1px solid #e2e8f0;
 }
-
 #qa-actions-table input,
 #qa-actions-table textarea {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #cbd5e0;
-  border-radius: 4px;
-  padding: 6px 8px;
+  width: 100%; box-sizing: border-box; border: 1px solid #cbd5e0; border-radius: 4px; padding: 6px 8px;
 }
 
-#qa-add-action {
-  margin-top: 12px;
-}
+#qa-add-action { margin-top: 12px; }

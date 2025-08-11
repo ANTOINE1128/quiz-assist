@@ -1,10 +1,10 @@
 <?php
+if ( ! defined( 'ABSPATH' ) ) exit;
+
 // Logging helper (disabled by default).
 function qa_log( $msg ) {
-    // Only log if QA_DEBUG is explicitly enabled.
     if ( defined('QA_DEBUG') && QA_DEBUG ) {
         $file = QA_DIR . 'quiz-assist-debug.log';
-        // Silently ignore write issues.
         @file_put_contents( $file, date('[Y-m-d H:i:s] ') . print_r($msg, true) . "\n", FILE_APPEND );
     }
 }

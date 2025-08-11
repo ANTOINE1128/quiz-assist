@@ -6,7 +6,8 @@
     apiBase,
     pollInterval,
     isUserLoggedIn,
-    currentUserName
+    currentUserName,
+    restNonce
   } = window.QA_Assist_Global_SETTINGS || {};
 
   function IconHome() {
@@ -68,7 +69,11 @@
     const [gPhone, setGPhone] = useState('');
     const lastSentRef = useRef(0);
 
-    // Load persisted session
+    const emailOk = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'').trim());
+    const phoneOk = (s) => String(s||'').replace(/\D/g,'').length >= 6;
+    const canStart = isUserLoggedIn || (gName.trim() && emailOk(gEmail) && phoneOk(gPhone));
+
+    // Persisted session
     useEffect(()=>{
       const sid = localStorage.getItem('qa_chat_session');
       const meta = JSON.parse(localStorage.getItem('qa_chat_session_meta') || '{}');
@@ -85,30 +90,31 @@
       }
     },[]);
 
-    // Fetch FAQs when opening
+    // Load FAQs once opened
     useEffect(()=>{
-      if (!isOpen) return;
-      if (faqs.length) return;
-      fetch(`${apiBase}/chat/faqs`)
+      if (!isOpen || faqs.length) return;
+      fetch(`${apiBase}/chat/faqs`, {
+        credentials:'same-origin',
+        headers:{ 'Accept':'application/json' }
+      })
         .then(r=>r.json())
         .then(d=> Array.isArray(d.faqs) ? setFaqs(d.faqs.slice(0,50)) : setFaqs([]))
         .catch(()=> setFaqs([]));
     },[isOpen]);
 
-    // Poll messages when chat started
+    // Poll messages
     useEffect(()=>{
       if (!started || !sessionId) return;
       let timer;
       const load = () => {
         if (document.hidden) return;
-        fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`)
-          .then(r=>{
-            if (!r.ok) throw new Error('no_session');
-            return r.json();
-          })
-          .then(d => {
-            setMessages(Array.isArray(d.messages) ? d.messages : []);
-          })
+        fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`, {
+          method:'GET',
+          credentials:'same-origin',
+          headers:{ 'X-WP-Nonce': restNonce || '', 'Accept': 'application/json' }
+        })
+          .then(r=>{ if (!r.ok) throw new Error('no_session'); return r.json(); })
+          .then(d => setMessages(Array.isArray(d.messages) ? d.messages : []))
           .catch(err=>{
             if (String(err.message) === 'no_session') {
               localStorage.removeItem('qa_chat_session');
@@ -138,15 +144,12 @@
 
     function startChat() {
       setError('');
-      // Already live? hop to messages
-      if (started && sessionId) {
-        setTab('messages');
-        return;
-      }
+      if (started && sessionId) { setTab('messages'); return; }
       if (!isUserLoggedIn) {
-        if (!gName.trim() || !gEmail.trim() || !gPhone.trim()) {
-          setError('Please fill your name, email, and phone.');
-          return;
+        if (!canStart) {
+          if (!gName.trim()) return setError('Please enter your name.');
+          if (!emailOk(gEmail)) return setError('Please enter a valid email (e.g., name@example.com).');
+          if (!phoneOk(gPhone)) return setError('Please enter a valid phone number.');
         }
       }
       setLoadingStart(true);
@@ -156,8 +159,9 @@
         guest_phone: gPhone.trim()
       };
       fetch(`${apiBase}/chat/start`, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
+        method:'POST',
+        credentials:'same-origin',
+        headers:{ 'Content-Type':'application/json', 'X-WP-Nonce': restNonce || '' },
         body: JSON.stringify(payload || {})
       })
       .then(async r=>{
@@ -185,9 +189,7 @@
           localStorage.removeItem('qa_chat_session_meta');
         }
       })
-      .catch(e=>{
-        setError(e.message || 'Could not start chat. Please try again.');
-      })
+      .catch(e=> setError(e.message || 'Could not start chat. Please try again.'))
       .finally(()=> setLoadingStart(false));
     }
 
@@ -214,89 +216,80 @@
 
       fetch(`${apiBase}/chat/send`, {
         method:'POST',
-        headers:{ 'Content-Type':'application/json' },
+        credentials:'same-origin',
+        headers:{ 'Content-Type':'application/json', 'X-WP-Nonce': restNonce || '' },
         body: JSON.stringify({ session_id: sessionId, message: text })
       })
-      .then(r=>{
-        if (!r.ok) throw new Error('send_failed');
-      })
+      .then(r=>{ if (!r.ok) throw new Error('send_failed'); })
       .catch(()=>{
         setMessages(prev => prev.filter(m => !(m.sender==='user' && m.message===text)));
         setError('Failed to send. Please try again.');
       });
     }
 
-    // UI helpers
     const headerTitle = tab === 'home'
       ? `Hi ${isUserLoggedIn ? currentUserName : (gName || 'there')} 👋`
       : 'Messages';
 
-    const visitorTooltip = isUserLoggedIn
-      ? ''
-      : (gName && gEmail && gPhone)
-        ? `Name: ${gName}\nEmail: ${gEmail}\nPhone: ${gPhone}`
-        : '';
+    const visitorTooltip = isUserLoggedIn ? '' :
+      (gName && gEmail && gPhone) ? `Name: ${gName}\nEmail: ${gEmail}\nPhone: ${gPhone}` : '';
 
     return h('div', { className:'qa-floating' },
 
-      // Toggle button
       h('button', {
         className:'qa-fab',
         onClick:()=> setIsOpen(o=>!o),
         'aria-label': isOpen ? 'Close chat' : 'Open chat'
       }, h(IconChat,null)),
 
-      // Panel
       isOpen && h('div', { className:'qa-panel' },
 
-        // Header
         h('div', { className:'qa-header' },
           h('div', { className:'qa-title' }, headerTitle),
           h('button', { className:'qa-close', onClick:()=>setIsOpen(false), 'aria-label':'Close' }, h(IconClose,null))
         ),
 
-        // Body
         h('div', { className:'qa-body' },
 
-          // HOME TAB
           tab==='home' && h('div', { className:'qa-home' },
 
-            // "Send us a message" card
             h('div', { className:'qa-card qa-action' },
               h('div', { className:'qa-action-main' },
                 h('div', { className:'qa-action-title' }, 'Send us a message'),
                 h('div', { className:'qa-action-sub' }, "We'll be back online on Monday")
               ),
-              h('button', { className:'qa-action-go', onClick: startChat, disabled: loadingStart },
-                loadingStart ? 'Starting…' : 'Start Chat'
+              h('button', { className:'qa-action-go', onClick: startChat, disabled: loadingStart || (!isUserLoggedIn && !canStart) },
+                loadingStart ? 'Starting…' : (started ? 'Go to Chat' : 'Start Chat')
               )
             ),
 
-            // Guest form (only when not logged in)
-            !isUserLoggedIn && h('div', { className:'qa-card qa-guest' },
+            (!isUserLoggedIn && !started) && h('div', { className:'qa-card qa-guest' },
               h('div', { className:'qa-field' },
-                h('label', null, 'Your Name'),
-                h('input', { type:'text', value:gName, onChange:e=>setGName(e.target.value), placeholder:'Jane Doe' })
+                h('label', { htmlFor:'qa_g_name' }, 'Your Name'),
+                h('input', { id:'qa_g_name', type:'text', value:gName, onChange:e=>setGName(e.target.value), placeholder:'Jane Doe', required:true })
               ),
               h('div', { className:'qa-field' },
-                h('label', null, 'Your Email'),
-                h('input', { type:'email', value:gEmail, onChange:e=>setGEmail(e.target.value), placeholder:'jane@example.com' })
+                h('label', { htmlFor:'qa_g_email' }, 'Your Email'),
+                h('input', { id:'qa_g_email', type:'email', value:gEmail, onChange:e=>setGEmail(e.target.value), placeholder:'jane@example.com', required:true })
               ),
               h('div', { className:'qa-field' },
-                h('label', null, 'Phone'),
-                h('input', { type:'tel', value:gPhone, onChange:e=>setGPhone(e.target.value), placeholder:'(555) 555-5555' })
+                h('label', { htmlFor:'qa_g_phone' }, 'Phone'),
+                h('input', { id:'qa_g_phone', type:'tel', value:gPhone, onChange:e=>setGPhone(e.target.value), placeholder:'(555) 555-5555', required:true })
               ),
               !!error && h('div', { className:'qa-error' }, error)
             ),
 
-            // Resources (FAQs) — Accordion
+            (!isUserLoggedIn && started) && h('div', { className:'qa-card' },
+              h('div', { className:'qa-section-title' }, 'Session active'),
+              h('div', null, `You are chatting as ${gName || 'Guest'} (${gEmail || '—'})`)
+            ),
+
             h('div', { className:'qa-card' },
               h('div', { className:'qa-section-title' }, 'Resources for Getting Started'),
               (faqs.length ? h(FAQAccordion, { items: faqs }) : h('div', { className:'qa-empty' }, 'No FAQs found.'))
             )
           ),
 
-          // MESSAGES TAB
           tab==='messages' && h('div', { className:'qa-chat' },
             h('div', { className:'qa-chat-messages' },
               messages.map((m, i)=> h('div', {
@@ -322,12 +315,11 @@
           )
         ),
 
-        // Bottom Nav
         h('div', { className:'qa-nav' },
           h('button', { className: 'qa-tab' + (tab==='home' ? ' active' : ''), onClick:()=>setTab('home') },
             h(IconHome,null), h('span', null, 'Home')
           ),
-          h('button', { className: 'qa-tab' + (tab==='messages' ? ' active' : ''), onClick:()=> setTab('messages') },
+          h('button', { className: 'qa-tab' + (tab==='messages' ? ' active' : ''), onClick:()=> setTab('messages'), disabled: !started },
             h(IconChat,null), h('span', null, 'Messages')
           )
         )

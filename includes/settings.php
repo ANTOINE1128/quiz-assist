@@ -2,18 +2,12 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * Register *all* our settings, sections & fields.
+ * Register settings, sections & fields.
  */
 add_action( 'admin_init', 'qa_settings_init' );
 function qa_settings_init() {
-  // register the single option that holds everything
-  register_setting(
-    'quizAssist',
-    'quiz_assist_options',
-    'qa_sanitize_options'
-  );
+  register_setting( 'quizAssist', 'quiz_assist_options', 'qa_sanitize_options' );
 
-  // a single section for everything
   add_settings_section(
     'qa_section',
     'Quiz Assist Settings',
@@ -40,7 +34,7 @@ function qa_settings_init() {
     'qa_section'
   );
 
-  // 3) Quiz‑widget buttons
+  // 3) Quiz-widget buttons
   add_settings_field(
     'qa_quiz_actions',
     'Quiz Widget Actions',
@@ -49,16 +43,16 @@ function qa_settings_init() {
     'qa_section'
   );
 
-  // 4) Global‑chat buttons (kept for backwards compatibility)
+  // 4) Global-chat quick replies
   add_settings_field(
     'qa_global_actions',
-    'Global Chat Quick‑Replies',
+    'Global Chat Quick-Replies',
     'qa_render_global_actions',
     'quizAssist',
     'qa_section'
   );
 
-  // 5) FAQs (Resources) — new repeater (Question + Answer)
+  // 5) FAQs (Resources)
   add_settings_field(
     'qa_faqs',
     'FAQs (Resources)',
@@ -68,52 +62,41 @@ function qa_settings_init() {
   );
 }
 
-/**
- * Renders a simple <input type=text>
- */
+/** Renders a simple <input> */
 function qa_render_text( $args ) {
   $opts = get_option( 'quiz_assist_options', [] );
-  $val  = isset( $opts[ $args['field'] ] )
-         ? trim( $opts[ $args['field'] ] )
-         : '';
+  $val  = isset( $opts[ $args['field'] ] ) ? trim( $opts[ $args['field'] ] ) : '';
   printf(
-    '<input type="%1$s" name="quiz_assist_options[%2$s]" value="%3$s" class="regular-text"/>',
+    '<input type="%1$s" name="quiz_assist_options[%2$s]" value="%3$s" class="regular-text" autocomplete="off"/>',
     esc_attr( $args['type'] ),
     esc_attr( $args['field'] ),
     esc_attr( $val )
   );
 }
 
-/**
- * Renders the model <select>
- */
+/** Model select (fetched from OpenAI when key present) */
 function qa_render_model() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $current = $opts['qa_model'] ?? 'gpt-4';
   $apikey  = trim( $opts['qa_openai_key'] ?? '' );
 
   if ( ! $apikey ) {
-    echo '<p style="color:red;">Enter your OpenAI API Key above to load models.</p>';
+    echo '<p style="color:#b91c1c;">Enter your OpenAI API Key above to load models.</p>';
     return;
   }
 
-  // fetch models from OpenAI
   $resp = wp_remote_get( 'https://api.openai.com/v1/models', [
-    'headers' => [
-      'Authorization' => "Bearer {$apikey}",
-    ],
+    'headers' => [ 'Authorization' => "Bearer {$apikey}" ],
     'timeout' => 20,
   ] );
   if ( is_wp_error( $resp ) ) {
-    echo '<p style="color:red;">Error fetching models: '
-       . esc_html( $resp->get_error_message() )
-       . '</p>';
+    echo '<p style="color:#b91c1c;">Error fetching models: ' . esc_html( $resp->get_error_message() ) . '</p>';
     return;
   }
 
   $data = json_decode( wp_remote_retrieve_body( $resp ), true );
   if ( empty( $data['data'] ) || ! is_array( $data['data'] ) ) {
-    echo '<p style="color:red;">Unexpected response when fetching models.</p>';
+    echo '<p style="color:#b91c1c;">Unexpected response when fetching models.</p>';
     return;
   }
 
@@ -131,9 +114,7 @@ function qa_render_model() {
   echo '</select>';
 }
 
-/**
- * Quiz‑widget actions repeater
- */
+/** Quiz-widget actions repeater */
 function qa_render_actions() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $actions = $opts['qa_quiz_actions'] ?? [];
@@ -145,9 +126,8 @@ function qa_render_actions() {
   }
   echo '<p class="description">Use these placeholders in your <em>User Prompt</em>.</p>';
   echo '</div>';
-
   ?>
-  <table id="qa-actions-table">
+  <table id="qa-actions-table" class="widefat striped">
     <thead>
       <tr>
         <th>Label</th><th>System Prompt</th><th>User Prompt</th><th>Remove</th>
@@ -196,7 +176,6 @@ function qa_render_actions() {
     $(document).on('click','.qa-remove-action',function(e){
       e.preventDefault();
       $(this).closest('tr').remove();
-      // reindex
       tbody.children().each(function(i,tr){
         $(tr).find('input').attr('name',`quiz_assist_options[qa_quiz_actions][${i}][label]`);
         $(tr).find('textarea').eq(0).attr('name',`quiz_assist_options[qa_quiz_actions][${i}][sys]`);
@@ -209,9 +188,7 @@ function qa_render_actions() {
   echo '</div>';
 }
 
-/**
- * Global‑chat quick replies (kept as-is)
- */
+/** Global-chat quick replies repeater */
 function qa_render_global_actions() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $actions = $opts['qa_global_actions'] ?? [];
@@ -271,9 +248,7 @@ function qa_render_global_actions() {
   <?php
 }
 
-/**
- * FAQs repeater (Question + Answer) for the Resources section
- */
+/** FAQs repeater */
 function qa_render_faqs() {
   $opts = get_option( 'quiz_assist_options', [] );
   $faqs = $opts['qa_faqs'] ?? [];
@@ -335,7 +310,6 @@ function qa_render_faqs() {
     $(document).on('click', '.qa-faq-remove', function(e){
       e.preventDefault();
       $(this).closest('tr').remove();
-      // Re-index names so gaps don’t break saves
       $tbody.children().each(function(i,tr){
         $(tr).find('input').attr('name', `quiz_assist_options[qa_faqs][${i}][q]`);
         $(tr).find('textarea').attr('name', `quiz_assist_options[qa_faqs][${i}][a]`);
@@ -346,18 +320,13 @@ function qa_render_faqs() {
   <?php
 }
 
-/**
- * Sanitize everything on save.
- */
+/** Sanitize settings */
 function qa_sanitize_options( $input ) {
   $clean = [];
 
-  // API key
   $clean['qa_openai_key']   = sanitize_text_field( trim( $input['qa_openai_key'] ?? '' ) );
-  // model
   $clean['qa_model']        = sanitize_text_field( trim( $input['qa_model'] ?? 'gpt-4' ) );
 
-  // quiz_actions
   $clean['qa_quiz_actions'] = [];
   if ( ! empty( $input['qa_quiz_actions'] ) && is_array( $input['qa_quiz_actions'] ) ) {
     foreach ( $input['qa_quiz_actions'] as $act ) {
@@ -365,39 +334,29 @@ function qa_sanitize_options( $input ) {
       $sys = wp_kses_post(      trim( $act['sys']   ?? '' ) );
       $usr = wp_kses_post(      trim( $act['user']  ?? '' ) );
       if ( $lab && $sys && $usr ) {
-        $clean['qa_quiz_actions'][] = compact( 'lab','sys','usr' );
+        $clean['qa_quiz_actions'][] = [ 'label'=>$lab, 'sys'=>$sys, 'user'=>$usr ];
       }
     }
-    $clean['qa_quiz_actions'] = array_map(function($a){
-      return [ 'label'=>$a['lab'],'sys'=>$a['sys'],'user'=>$a['usr'] ];
-    }, $clean['qa_quiz_actions']);
   }
 
-  // global_actions
   $clean['qa_global_actions'] = [];
   if ( ! empty( $input['qa_global_actions'] ) && is_array( $input['qa_global_actions'] ) ) {
     foreach ( $input['qa_global_actions'] as $act ) {
-      $lab = sanitize_text_field(   trim( $act['label'] ?? '' ) );
-      $sys = wp_kses_post(          trim( $act['sys']   ?? '' ) );
-      $usr = wp_kses_post(          trim( $act['user']  ?? '' ) );
+      $lab = sanitize_text_field( trim( $act['label'] ?? '' ) );
+      $sys = wp_kses_post(      trim( $act['sys']   ?? '' ) );
+      $usr = wp_kses_post(      trim( $act['user']  ?? '' ) );
       if ( $lab && $sys && $usr ) {
-        $clean['qa_global_actions'][] = compact( 'lab','sys','usr' );
+        $clean['qa_global_actions'][] = [ 'label'=>$lab, 'sys'=>$sys, 'user'=>$usr ];
       }
     }
-    $clean['qa_global_actions'] = array_map(function($a){
-      return [ 'label'=>$a['lab'],'sys'=>$a['sys'],'user'=>$a['usr'] ];
-    }, $clean['qa_global_actions'] );
   }
 
-  // faqs
   $clean['qa_faqs'] = [];
   if ( ! empty( $input['qa_faqs'] ) && is_array( $input['qa_faqs'] ) ) {
     foreach ( $input['qa_faqs'] as $f ) {
       $q = sanitize_text_field( trim( $f['q'] ?? '' ) );
       $a = wp_kses_post(      trim( $f['a'] ?? '' ) );
-      if ( $q && $a ) {
-        $clean['qa_faqs'][] = [ 'q' => $q, 'a' => $a ];
-      }
+      if ( $q && $a ) $clean['qa_faqs'][] = [ 'q' => $q, 'a' => $a ];
     }
   }
 

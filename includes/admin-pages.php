@@ -2,7 +2,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 /**
- * 1) Admin menu
+ * Admin menu
  */
 add_action( 'admin_menu', function() {
     $parent = 'quiz_assist';
@@ -37,12 +37,11 @@ add_action( 'admin_menu', function() {
 });
 
 /**
- * 2) Enqueue admin assets
+ * Enqueue admin assets
  */
 add_action( 'admin_enqueue_scripts', function() {
     $page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
 
-    // Settings page CSS
     if ( $page === 'quiz_assist' ) {
         if ( file_exists( QA_DIR . 'assets/css/admin.css' ) ) {
             wp_enqueue_style(
@@ -55,8 +54,15 @@ add_action( 'admin_enqueue_scripts', function() {
         return;
     }
 
-    // Chats page assets
     if ( $page === 'quiz_assist_chats' ) {
+        if ( file_exists( QA_DIR . 'assets/css/admin-chat.css' ) ) {
+            wp_enqueue_style(
+                'qa-admin-chat-css',
+                QA_URL . 'assets/css/admin-chat.css',
+                [],
+                filemtime( QA_DIR . 'assets/css/admin-chat.css' )
+            );
+        }
         if ( file_exists( QA_DIR . 'assets/js/admin-chat.js' ) ) {
             wp_enqueue_script(
                 'qa-admin-chat-js',
@@ -75,24 +81,10 @@ add_action( 'admin_enqueue_scripts', function() {
                 'deleteNonce'    => wp_create_nonce( 'qa_delete_chat_any' ),
             ] );
         }
-
-        $inline = '
-          .qa-unread-badge{background:#d63333;color:#fff;padding:2px 6px;border-radius:12px;font-size:11px;vertical-align:middle;margin-left:6px}
-          .qa-chats-table .col-actions{width:220px;text-align:right}
-          .qa-btn-delete.button{background:#dc2626;border-color:#dc2626;color:#fff}
-          .qa-btn-delete.button:hover{background:#b91c1c;border-color:#b91c1c;color:#fff}
-          .qa-user-meta{color:#334155;font-size:12px;margin-top:2px}
-          .qa-user-meta span{display:inline-block;margin-right:10px}
-        ';
-        wp_register_style( 'qa-admin-chats-base', false );
-        wp_enqueue_style( 'qa-admin-chats-base' );
-        wp_add_inline_style( 'qa-admin-chats-base', $inline );
     }
 });
 
-/**
- * 3) Settings page shell
- */
+/** Settings page */
 function qa_render_settings_page() { ?>
   <div class="wrap">
     <h1>Quiz Assist Settings</h1>
@@ -106,9 +98,7 @@ function qa_render_settings_page() { ?>
   </div>
 <?php }
 
-/**
- * 4) Chats page
- */
+/** Chats page */
 function qa_render_chats_page() {
     global $wpdb;
     $sess_table = $wpdb->prefix . 'qa_chat_sessions';
@@ -152,27 +142,26 @@ function qa_render_chats_page() {
         );
 
         // Messages container (JS populates)
-        echo '<div id="qa-chat-messages" style="border:1px solid #ddd;padding:12px;max-height:420px;overflow-y:auto;"></div>';
+        echo '<div id="qa-chat-messages" class="qa-admin-chat-box"></div>';
 
         // Reply form
         ?>
-        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" style="margin-top:12px;">
+        <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" class="qa-reply-form">
           <input type="hidden" name="action" value="qa_send_admin_message">
           <input type="hidden" name="session_id" value="<?php echo esc_attr( $session_id ); ?>">
-          <textarea name="admin_message" rows="3" style="width:100%;margin-bottom:8px;" placeholder="Type reply…" required></textarea>
+          <textarea name="admin_message" rows="3" placeholder="Type reply…" required></textarea>
           <?php submit_button( 'Send Reply' ); ?>
         </form>
         <?php
 
     } else {
-        // List table (JS fills rows)
-        echo '<table id="qa-chat-sessions-table" class="widefat striped qa-chats-table">
+        echo '<table id="qa-chat-sessions-table" class="widefat striped qa-sessions-table">
                 <thead>
                   <tr>
                     <th style="width:120px;">Session</th>
                     <th>Details</th>
                     <th style="width:220px;">Last Message</th>
-                    <th class="col-actions">Actions</th>
+                    <th class="qa-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -184,9 +173,7 @@ function qa_render_chats_page() {
     echo '</div>';
 }
 
-/**
- * 5) Admin: send reply
- */
+/** Admin: send reply */
 add_action( 'admin_post_qa_send_admin_message', function(){
     if ( ! current_user_can( 'manage_options' ) ) {
         wp_die( 'Unauthorized', '', [ 'response' => 403 ] );
@@ -211,9 +198,7 @@ add_action( 'admin_post_qa_send_admin_message', function(){
     exit;
 });
 
-/**
- * 6) Admin: delete session (messages then session)
- */
+/** Admin: delete session (messages then session) */
 add_action( 'admin_post_qa_delete_chat_session', function(){
     if ( ! current_user_can('manage_options' ) ) {
         wp_die( 'Unauthorized', '', [ 'response' => 403 ] );

@@ -7,11 +7,9 @@
   background: #fff;
 }
 
-.qa-admin-chat-box .qa-line {
-  margin: 0 0 6px;
-}
+.qa-admin-chat-box .qa-line { margin: 0 0 6px; }
 .qa-admin-chat-box .qa-line.admin strong { color: #0052cc; }
-.qa-admin-chat-box .qa-line.user strong  { color: #111; }
+.qa-admin-chat-box .qa-line.user  strong { color: #111; }
 
 .qa-admin-chat-box .qa-ts {
   font-size: 11px;
@@ -39,9 +37,7 @@
   white-space: nowrap;
 }
 
-.qa-sessions-table td.qa-actions .button {
-  margin-left: 6px;
-}
+.qa-sessions-table td.qa-actions .button { margin-left: 6px; }
 
 .qa-sessions-table a.button-link-delete {
   background: #f8d7da;
