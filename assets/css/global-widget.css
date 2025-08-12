@@ -1,5 +1,8 @@
-/* Container + floating button */
-.qa-floating { position: fixed; right: 20px; bottom: 20px; z-index: 99999; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+/* ===== Base / container ===== */
+.qa-floating {
+  position: fixed; right: 20px; bottom: 20px; z-index: 99999;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
 .qa-fab {
   width: 56px; height: 56px; border-radius: 9999px; border: none; cursor: pointer;
   display:flex; align-items:center; justify-content:center;
@@ -7,32 +10,24 @@
 }
 .qa-fab:hover { filter: brightness(0.95); }
 
-/* Panel */
 .qa-panel {
-  position: fixed; right: 20px; bottom: 90px; width: 400px; max-width: calc(100vw - 40px);
+  position: fixed; right: 20px; bottom: 90px; width: 360px; max-width: calc(100vw - 40px);
   background:#fff; border-radius: 16px; box-shadow: 0 24px 48px rgba(0,0,0,0.2); overflow:hidden;
 }
-
-/* Header */
 .qa-header {
   background:#ef233c; color:#fff; padding: 16px 16px;
   display:flex; align-items:center; justify-content:space-between;
 }
 .qa-title { font-size: 18px; font-weight: 700; }
-.qa-close { appearance:none; background: transparent; border:0; color:#fff; cursor:pointer; opacity: .9; }
-.qa-close:hover { opacity: 1; }
+.qa-close { appearance:none; background: transparent; border:0; color:#fff; cursor:pointer; opacity:.9; }
+.qa-close:hover { opacity:1; }
 
-/* Body */
-.qa-body { max-height: 65vh; overflow: auto; padding: 12px; background:#fafafa; }
-
-/* Cards */
+.qa-body { max-height: 60vh; overflow: auto; padding: 12px; background:#fafafa; }
 .qa-card { background:#fff; border-radius:12px; padding:12px; box-shadow: 0 1px 0 rgba(0,0,0,0.05); margin-bottom:10px; }
 .qa-section-title { font-weight:700; margin-bottom:8px; }
 
-/* Notes */
-.qa-note { font-size: 12px; color:#475569; margin-top:6px; }
-
-/* Action card */
+/* ===== Pathways (stacked) ===== */
+.qa-home-stack { display:flex; flex-direction:column; gap:10px; }
 .qa-action { display:flex; align-items:center; justify-content:space-between; }
 .qa-action-title { font-weight:600; }
 .qa-action-sub { font-size:12px; color:#6b7280; }
@@ -41,30 +36,55 @@
 }
 .qa-action-go:disabled { opacity:.7; cursor:not-allowed; }
 
-/* Guest form */
+/* ===== Guest form ===== */
 .qa-field { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
 .qa-field input {
   border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; font-size:14px; outline:none;
 }
 .qa-field input:focus { border-color:#0b5cff; box-shadow: 0 0 0 3px rgba(11,92,255,0.15); }
-
 .qa-error { color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; padding:8px 10px; border-radius:8px; font-size:13px; }
 
-/* FAQ list — ALWAYS visible text (override themes) */
-.qa-faq-list { display:flex; flex-direction:column; gap:8px; }
-.qa-faq-item {
-  display:flex; align-items:center; justify-content:space-between; gap:8px;
-  border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; text-decoration:none;
-  background:#fff; color:#111827;
+/* ===== Mini Accordion (Resources) — override theme button styles ===== */
+.qa-acc { display:flex; flex-direction:column; gap:14px; }
+.qa-acc-item {
+  border-radius:8px; background:#f8fafc; border:1px solid #e5e7eb;
 }
-.qa-faq-toggle { color:#111827 !important; }
-.qa-faq-item:hover { background:#f9fafb; }
-.qa-faq-arrow { opacity:.5; }
 
-/* Chat area */
-.qa-chat { display:flex; flex-direction:column; height: 52vh; max-height: 52vh; }
+/* The theme styles all <button>. Make this more specific and force our look. */
+.qa-card .qa-acc .qa-acc-head,
+.qa-acc .qa-acc-head {
+  background:#ffffff !important;
+  color:#0f172a !important;
+  border:1px solid #e5e7eb !important;
+  border-radius:10px !important;
+  padding:14px 16px !important;
+  width:100% !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  text-align:left !important;
+  font-weight:700 !important;
+  font-size:16px !important;
+  cursor:pointer !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03) !important;
+}
+
+/* Chevron rotation */
+.qa-acc-title { flex:1; }
+.qa-acc-chevron { transition: transform .18s ease; display:flex; }
+.qa-acc-item.open .qa-acc-chevron { transform: rotate(180deg); }
+
+/* Panel */
+.qa-acc-panel {
+  padding: 0 18px 16px 18px;
+  font-size:14px; color:#334155; line-height:1.55;
+  background:#f8fafc; border-top:1px solid #e5e7eb;
+}
+
+/* ===== Chat area ===== */
+.qa-chat { display:flex; flex-direction:column; height:52vh; max-height:52vh; }
 .qa-chat-messages { flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px; }
-.qa-msg { max-width: 80%; padding:8px 10px; border-radius:12px; }
+.qa-msg { max-width:80%; padding:8px 10px; border-radius:12px; }
 .from-user { align-self:flex-end; background:#e0ecff; }
 .from-admin { align-self:flex-start; background:#f3f4f6; }
 .qa-msg-text { font-size:14px; }
@@ -74,23 +94,130 @@
 .qa-chat-input button { background:#0b5cff; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer; }
 .qa-chat-error { margin-top:8px; }
 
-/* Quick replies */
-.qa-quick { display:flex; flex-wrap:wrap; gap:6px; }
-.qa-quick-row { padding:6px 4px; }
+/* ===== Quick replies (keep blue pill look) ===== */
+.qa-quick { display:flex; flex-wrap:wrap; gap:8px; }
+.qa-quick-row { padding:4px 0 8px; }
 .qa-chip-btn {
-  border:1px solid #dbeafe; background:#eff6ff; color:#1e40af; border-radius:9999px; padding:6px 10px; cursor:pointer; font-size:12px;
+  background:#0b5cff; color:#fff; border:0; border-radius:9999px; padding:12px 18px;
+  font-size:14px; cursor:pointer; font-weight:600;
 }
-.qa-chip-btn:hover { background:#dbeafe; }
-.qa-chip-btn.disabled { opacity:.6; cursor:not-allowed; pointer-events:none; }
+.qa-chip-btn:hover { filter: brightness(0.95); }
+.qa-chip-btn.disabled { opacity:.5; cursor:not-allowed; }
+.qa-note { font-size:12px; color:#475569; margin-top:6px; }
 
-/* Bottom nav */
+/* ===== Profile ===== */
+.qa-profile .qa-profile-actions { margin-top:6px; }
+
+/* ===== Booking (Calendly) ===== */
+.qa-book { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:0; overflow:hidden; height:520px; }
+.qa-book-iframe { width:100%; height:520px; border:0; display:block; }
+
+/* ===== Bottom nav — prevent pill styles from theme ===== */
 .qa-nav { display:flex; border-top:1px solid #eee; background:#fff; }
 .qa-tab {
   flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
-  padding:10px 0; border:0; background:transparent; cursor:pointer; color:#6b7280; font-weight:600;
+  padding:10px 0 !important; /* force spacing */
+  border:0 !important;
+  background:transparent !important;
+  border-radius:0 !important;
+  cursor:pointer; color:#6b7280; font-weight:600;
 }
 .qa-tab.active { color:#0b5cff; }
-.qa-tab:disabled { opacity:.5; cursor:not-allowed; }
+.qa-tab[disabled] { opacity:.5; cursor:not-allowed; }
+
+/* Optional: clearer focus ring for keyboard users */
+.qa-acc-head:focus-visible,
+.qa-tab:focus-visible,
+.qa-action-go:focus-visible,
+.qa-chip-btn:focus-visible {
+  outline: 2px solid #0b5cff; outline-offset: 2px;
+}
+/* Base */
+.qa-floating{position:fixed;right:20px;bottom:20px;z-index:99999;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+.qa-fab{width:56px;height:56px;border-radius:9999px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#0b5cff;color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.15)}
+.qa-fab:hover{filter:brightness(.95)}
+.qa-panel{position:fixed;right:20px;bottom:90px;width:360px;max-width:calc(100vw - 40px);background:#fff;border-radius:16px;box-shadow:0 24px 48px rgba(0,0,0,.2);overflow:hidden}
+.qa-header{background:#ef233c;color:#fff;padding:16px 16px;display:flex;align-items:center;justify-content:space-between}
+.qa-title{font-size:18px;font-weight:700}
+.qa-close{appearance:none;background:transparent;border:0;color:#fff;cursor:pointer;opacity:.9}
+.qa-close:hover{opacity:1}
+.qa-body{max-height:60vh;overflow:auto;padding:12px;background:#fafafa}
+.qa-card{background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 0 rgba(0,0,0,.05);margin-bottom:10px}
+.qa-section-title{font-weight:700;margin-bottom:8px}
+
+/* Pathways (stacked) */
+.qa-home-stack{display:flex;flex-direction:column;gap:10px}
+.qa-action{display:flex;align-items:center;justify-content:space-between}
+.qa-action-title{font-weight:600}
+.qa-action-sub{font-size:12px;color:#6b7280}
+.qa-action-go{background:#0b5cff;color:#fff;border:0;border-radius:9999px;padding:8px 14px;cursor:pointer;font-weight:600}
+.qa-action-go:disabled{opacity:.7;cursor:not-allowed}
+
+/* Guest form */
+.qa-field{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.qa-field input{border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-size:14px;outline:none}
+.qa-field input:focus{border-color:#0b5cff;box-shadow:0 0 0 3px rgba(11,92,255,.15)}
+.qa-error{color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;padding:8px 10px;border-radius:8px;font-size:13px}
+
+/* Mini Accordion (Resources) */
+.qa-acc{display:flex;flex-direction:column;gap:14px}
+.qa-acc-item{border-radius:8px;background:#f8fafc;border:1px solid #e5e7eb}
+.qa-card .qa-acc .qa-acc-head,
+.qa-acc .qa-acc-head{
+  background:#ffffff!important;color:#0f172a!important;border:1px solid #e5e7eb!important;border-radius:10px!important;
+  padding:14px 16px!important;width:100%!important;display:flex!important;align-items:center!important;justify-content:space-between!important;
+  text-align:left!important;font-weight:700!important;font-size:16px!important;cursor:pointer!important;box-shadow:0 1px 0 rgba(0,0,0,.03)!important
+}
+.qa-acc-title{flex:1}
+.qa-acc-chevron{transition:transform .18s ease;display:flex}
+.qa-acc-item.open .qa-acc-chevron{transform:rotate(180deg)}
+.qa-acc-panel{padding:0 18px 16px 18px;font-size:14px;color:#334155;line-height:1.55;background:#f8fafc;border-top:1px solid #e5e7eb}
+
+/* Chat */
+.qa-chat{display:flex;flex-direction:column;height:52vh;max-height:52vh}
+.qa-chat-messages{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:4px}
+.qa-msg{max-width:80%;padding:8px 10px;border-radius:12px}
+.from-user{align-self:flex-end;background:#e0ecff}
+.from-admin{align-self:flex-start;background:#f3f4f6}
+.qa-msg-text{font-size:14px}
+.qa-msg-time{font-size:11px;color:#6b7280;margin-top:4px}
+.qa-chat-input{display:flex;gap:8px;padding-top:8px}
+.qa-chat-input input{flex:1;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px}
+.qa-chat-input button{background:#0b5cff;color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+.qa-chat-error{margin-top:8px}
+
+/* Quick replies (keep blue pill look) */
+.qa-quick{display:flex;flex-wrap:wrap;gap:8px}
+.qa-quick-row{padding:4px 0 8px}
+.qa-chip-btn{background:#0b5cff;color:#fff;border:0;border-radius:9999px;padding:12px 18px;font-size:14px;cursor:pointer;font-weight:600}
+.qa-chip-btn:hover{filter:brightness(.95)}
+.qa-chip-btn.disabled{opacity:.5;cursor:not-allowed}
+.qa-note{font-size:12px;color:#475569;margin-top:6px}
 
 /* Profile */
-.qa-profile .qa-profile-actions { display:flex; justify-content:flex-end; margin-top:8px; }
+.qa-profile .qa-profile-actions{margin-top:6px}
+
+/* Booking (Calendly inline widget container) */
+.qa-book{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:0;overflow:hidden;height:520px}
+.calendly-inline-widget{width:100%!important;height:520px!important;border:0;display:block}
+
+/* Bottom nav — force icons/text visible, not only on hover */
+.qa-nav{display:flex;border-top:1px solid #eee;background:#fff}
+.qa-tab{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:10px 0!important;border:0!important;background:transparent!important;border-radius:0!important;
+  cursor:pointer;color:#6b7280!important;font-weight:600;opacity:1!important
+}
+/* Ensure SVGs inherit color and are always visible */
+.qa-tab svg{
+  width:20px;height:20px;display:block;
+  fill:currentColor!important;stroke:currentColor!important;opacity:1!important
+}
+.qa-tab span{line-height:1}
+.qa-tab.active{color:#0b5cff!important}
+.qa-tab[disabled]{opacity:.5!important;cursor:not-allowed}
+
+/* Focus rings for accessibility */
+.qa-acc-head:focus-visible,.qa-tab:focus-visible,.qa-action-go:focus-visible,.qa-chip-btn:focus-visible{
+  outline:2px solid #0b5cff;outline-offset:2px
+}

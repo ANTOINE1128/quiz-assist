@@ -43,7 +43,7 @@ function qa_settings_init() {
     'qa_section'
   );
 
-  // 4) Global-chat quick replies (Label + Message only)
+  // 4) Global-chat quick replies (Label + Message)
   add_settings_field(
     'qa_global_actions',
     'Global Chat Quick-Replies',
@@ -57,6 +57,15 @@ function qa_settings_init() {
     'qa_faqs',
     'FAQs (Resources)',
     'qa_render_faqs',
+    'quizAssist',
+    'qa_section'
+  );
+
+  // 6) NEW — Calendly URL for “Book a demo” (guest only)
+  add_settings_field(
+    'qa_calendly_url',
+    'Calendly URL (Guest Booking)',
+    'qa_render_calendly_url',
     'quizAssist',
     'qa_section'
   );
@@ -188,7 +197,7 @@ function qa_render_actions() {
   echo '</div>';
 }
 
-/** Global-chat quick replies (Label + Message only) */
+/** Global-chat quick replies (Label + Message) */
 function qa_render_global_actions() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $actions = $opts['qa_global_actions'] ?? [];
@@ -244,7 +253,7 @@ function qa_render_global_actions() {
   <?php
 }
 
-/** FAQs repeater (unchanged) */
+/** FAQs repeater */
 function qa_render_faqs() {
   $opts = get_option( 'quiz_assist_options', [] );
   $faqs = $opts['qa_faqs'] ?? [];
@@ -312,6 +321,17 @@ function qa_render_faqs() {
   <?php
 }
 
+/** NEW — Calendly URL field */
+function qa_render_calendly_url() {
+  $opts = get_option( 'quiz_assist_options', [] );
+  $val  = trim( $opts['qa_calendly_url'] ?? '' );
+  ?>
+  <input type="url" class="regular-text" name="quiz_assist_options[qa_calendly_url]"
+         value="<?php echo esc_attr($val); ?>" placeholder="https://calendly.com/yourname/30min" />
+  <p class="description">Guest-only “Book a demo” uses this link (Calendly public scheduling URL).</p>
+  <?php
+}
+
 /** Sanitize settings */
 function qa_sanitize_options( $input ) {
   $clean = [];
@@ -353,6 +373,10 @@ function qa_sanitize_options( $input ) {
       if ( $q && $a ) $clean['qa_faqs'][] = [ 'q' => $q, 'a' => $a ];
     }
   }
+
+  // NEW: Calendly URL
+  $url = trim( $input['qa_calendly_url'] ?? '' );
+  $clean['qa_calendly_url'] = $url ? esc_url_raw( $url ) : '';
 
   return $clean;
 }

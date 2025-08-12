@@ -8,33 +8,84 @@
     isUserLoggedIn,
     currentUserName,
     restNonce,
-    globalActions
+    globalActions,
+    calendlyUrl
   } = window.QA_Assist_Global_SETTINGS || {};
 
+  // Icons
   function IconHome(){return h('svg',{width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M12 3 3 10h2v10h5v-6h4v6h5V10h2L12 3z'}))}
   function IconChat(){return h('svg',{width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M2 4h20v12H6l-4 4V4zm4 4v2h12V8H6z'}))}
   function IconClose(){return h('svg',{width:16,height:16,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3 10.59 10.6 16.89 4.3z'}))}
   function IconUser(){return h('svg',{width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z'}))}
+  function IconCalendar(){return h('svg',{width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm12 6H5v12h14V8zM7 10h4v4H7v-4z'}))}
+  function Chevron(){return h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M8.12 9.29 12 13.17l3.88-3.88 1.41 1.41L12 16l-5.29-5.29 1.41-1.42z'}))}
 
-  function FAQAccordion({ items }) {
+  /** Mini accordion (Resources) */
+  function MiniAccordion({ items }) {
     const [openId, setOpenId] = useState(null);
-    return h('div',{className:'qa-faq-list'},
-      items.map(f=>{
-        const isOpen = openId===f.id;
-        return h('div',{key:f.id,className:'qa-faq-item',style:{flexDirection:'column',alignItems:'stretch'}},
-          h('button',{className:'qa-faq-toggle',onClick:()=>setOpenId(isOpen?null:f.id),style:{display:'flex',justifyContent:'space-between',alignItems:'center',width:'100%',background:'transparent',border:0,padding:0,cursor:'pointer',fontWeight:600,textAlign:'left'},'aria-expanded':isOpen?'true':'false'},
-            h('span',null,f.question),
-            h('span',{className:'qa-faq-arrow'},isOpen?'▾':'▸')
+    return h('div', { className: 'qa-acc' },
+      items.map(f => {
+        const isOpen = openId === f.id;
+        return h('div', { key: f.id, className: 'qa-acc-item' + (isOpen ? ' open' : '') },
+          h('button', {
+            type: 'button',
+            className: 'qa-acc-head',
+            onClick: () => setOpenId(isOpen ? null : f.id),
+            'aria-expanded': isOpen ? 'true' : 'false',
+            'aria-controls': `qa-acc-panel-${f.id}`,
+            id: `qa-acc-head-${f.id}`
+          },
+            h('span', { className: 'qa-acc-title' }, f.question),
+            h('span', { className: 'qa-acc-chevron', 'aria-hidden': 'true' }, h(Chevron, null))
           ),
-          isOpen && h('div',{className:'qa-faq-answer',style:{marginTop:8,fontSize:13,color:'#374151'},dangerouslySetInnerHTML:{__html:f.answer}})
+          isOpen && h('div', {
+            id: `qa-acc-panel-${f.id}`,
+            className: 'qa-acc-panel',
+            role: 'region',
+            'aria-labelledby': `qa-acc-head-${f.id}`,
+            dangerouslySetInnerHTML: { __html: f.answer }
+          })
         );
       })
     );
   }
 
+  /** Calendly inline embed (stable, no flicker) */
+  function CalendlyInline({ url }) {
+    const ref = wp.element.useRef(null);
+
+    useEffect(() => {
+      if (!url || !ref.current) return;
+
+      // Ensure script loaded once
+      const SRC = 'https://assets.calendly.com/assets/external/widget.js';
+      const already = document.querySelector(`script[src="${SRC}"]`);
+      if (!already) {
+        const s = document.createElement('script');
+        s.src = SRC;
+        s.async = true;
+        s.onload = () => window.Calendly && window.Calendly.initInlineWidgets && window.Calendly.initInlineWidgets();
+        document.head.appendChild(s);
+      } else {
+        // If script exists and Calendly is ready, init widgets in case of re-mount
+        if (window.Calendly && window.Calendly.initInlineWidgets) {
+          window.Calendly.initInlineWidgets();
+        }
+      }
+    }, [url]);
+
+    // Note: data-url is Calendly's recommended way
+    return h('div', {
+      ref,
+      className: 'calendly-inline-widget',
+      'data-url': url + (url.includes('?') ? '&' : '?') + 'hide_event_type_details=1&hide_landing_page_details=1',
+      style: { minWidth: '320px', height: '520px' }
+    });
+  }
+
   function GlobalWidget(){
     const [isOpen,setIsOpen]=useState(false);
-    const [tab,setTab]=useState('home'); // home|messages|profile
+    const [tab,setTab]=useState('home'); // home|messages|profile|book
     const [started,setStarted]=useState(false);
     const [sessionId,setSessionId]=useState('');
     const [messages,setMessages]=useState([]);
@@ -43,6 +94,7 @@
     const [error,setError]=useState('');
     const [loadingStart,setLoadingStart]=useState(false);
 
+    // Guest profile (powers guest form too)
     const [gName,setGName]=useState('');
     const [gEmail,setGEmail]=useState('');
     const [gPhone,setGPhone]=useState('');
@@ -51,32 +103,45 @@
     const [profileSaving,setProfileSaving]=useState(false);
     const [profileMsg,setProfileMsg]=useState('');
 
-    // Quick replies: label (button) + user (message text)
     const quickReplies=(globalActions||[]).filter(a=>a&&a.label&&a.user).map(a=>({label:a.label,text:a.user}));
 
     const emailOk=(s)=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s||'').trim());
     const phoneOk=(s)=>String(s||'').replace(/\D/g,'').length>=6;
     const canStart=isUserLoggedIn||(gName.trim()&&emailOk(gEmail)&&phoneOk(gPhone));
 
+    const calUrl = (typeof calendlyUrl==='string' && /^https:\/\/(?:www\.)?calendly\.com\//i.test((calendlyUrl||'').trim()))
+      ? calendlyUrl.trim() : '';
+
+    // Load persisted session & meta
     useEffect(()=>{
       const sid=localStorage.getItem('qa_chat_session');
       const meta=JSON.parse(localStorage.getItem('qa_chat_session_meta')||'{}');
-      if(sid){
-        setSessionId(sid); setStarted(true); setIsOpen(true); setTab('messages');
-        if(!isUserLoggedIn){ setGName(meta.name||''); setGEmail(meta.email||''); setGPhone(meta.phone||''); }
+      if(meta && !isUserLoggedIn){
+        if(meta.name) setGName(meta.name);
+        if(meta.email) setGEmail(meta.email);
+        if(meta.phone) setGPhone(meta.phone);
       }
+      if(sid){ setSessionId(sid); setStarted(true); setIsOpen(true); setTab('messages'); }
     },[]);
 
+    // Persist guest meta as they type
+    useEffect(()=>{
+      if(!isUserLoggedIn){
+        localStorage.setItem('qa_chat_session_meta', JSON.stringify({name:gName,email:gEmail,phone:gPhone}));
+      }
+    },[gName,gEmail,gPhone]);
+
+    // Fetch FAQs (users any time; guests after start)
     useEffect(()=>{
       const canSeeResources=isUserLoggedIn||started;
-      if(!isOpen||!canSeeResources) return;
-      if(faqs.length) return;
+      if(!isOpen||!canSeeResources||faqs.length) return;
       fetch(`${apiBase}/chat/faqs`,{credentials:'same-origin',headers:{'Accept':'application/json'}})
         .then(r=>r.json())
         .then(d=>Array.isArray(d.faqs)?setFaqs(d.faqs.slice(0,50)):setFaqs([]))
         .catch(()=>setFaqs([]));
     },[isOpen,started]);
 
+    // Poll messages
     useEffect(()=>{
       if(!started||!sessionId) return;
       let timer;
@@ -104,12 +169,10 @@
     function startChat(){
       setError('');
       if(started&&sessionId){ setTab('messages'); return; }
-      if(!isUserLoggedIn){
-        if(!canStart){
-          if(!gName.trim()) return setError('Please enter your name.');
-          if(!emailOk(gEmail)) return setError('Please enter a valid email (e.g., name@example.com).');
-          if(!phoneOk(gPhone)) return setError('Please enter a valid phone number.');
-        }
+      if(!isUserLoggedIn && !canStart){
+        if(!gName.trim()) return setError('Please enter your name.');
+        if(!emailOk(gEmail)) return setError('Please enter a valid email (e.g., name@example.com).');
+        if(!phoneOk(gPhone)) return setError('Please enter a valid phone number.');
       }
       setLoadingStart(true);
       const payload=isUserLoggedIn?{}:{guest_name:gName.trim(),guest_email:gEmail.trim(),guest_phone:gPhone.trim()};
@@ -128,6 +191,8 @@
         .finally(()=>setLoadingStart(false));
     }
 
+    function goToBooking(){ if(!isUserLoggedIn) setTab('book'); }
+
     function sendMessageText(text){
       const now=Date.now(); if(now-(lastSentRef.current||0)<800) return; lastSentRef.current=now;
       const message=(text||input||'').trim(); if(!message) return;
@@ -143,31 +208,24 @@
 
     function saveProfile(e){
       e&&e.preventDefault();
-      if(isUserLoggedIn||!started||!sessionId) return;
       setProfileMsg('');
-      const emailValid=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gEmail.trim());
-      const phoneValid=String(gPhone||'').replace(/\D/g,'').length>=6;
-      if(!gName.trim()||!emailValid||!phoneValid){ setProfileMsg('Please provide a valid name, email, and phone.'); return; }
-      setProfileSaving(true);
-      fetch(`${apiBase}/chat/profile`,{
-        method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':restNonce||''},
-        body:JSON.stringify({session_id:sessionId,guest_name:gName.trim(),guest_email:gEmail.trim(),guest_phone:gPhone.trim()})
-      })
-        .then(async r=>{const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j?.message||'Save failed');
-          localStorage.setItem('qa_chat_session_meta',JSON.stringify({name:gName.trim(),email:gEmail.trim(),phone:gPhone.trim()}));
-          setProfileMsg('Saved!');
-        })
-        .catch(err=>setProfileMsg('❌ '+(err.message||'Save failed')))
-        .finally(()=>setProfileSaving(false));
+      if(!gName.trim()||!emailOk(gEmail)||!phoneOk(gPhone)){ setProfileMsg('Please provide a valid name, email, and phone.'); return; }
+      localStorage.setItem('qa_chat_session_meta', JSON.stringify({name:gName.trim(),email:gEmail.trim(),phone:gPhone.trim()}));
+      setProfileMsg('Saved!');
     }
 
-    const headerTitle = tab==='home' ? `Hi ${isUserLoggedIn?currentUserName:(gName||'there')} 👋` : (tab==='profile'?'Profile':'Messages');
+    const headerTitle =
+      tab==='home'     ? `Hi ${isUserLoggedIn?currentUserName:(gName||'there')} 👋` :
+      tab==='profile'  ? 'Profile' :
+      tab==='book'     ? 'Book a demo' :
+                         'Messages';
+
     const visitorTooltip = isUserLoggedIn ? '' : (gName&&gEmail&&gPhone) ? `Name: ${gName}\nEmail: ${gEmail}\nPhone: ${gPhone}` : '';
     const canSeeResources = isUserLoggedIn || started;
 
     const QuickReplies = () => {
-      if(!quickReplies.length) return null;
       const disabled=!isUserLoggedIn && !started;
+      if(!quickReplies.length) return null;
       return h('div',{className:'qa-card'},
         h('div',{className:'qa-section-title'},'Quick replies'),
         h('div',{className:'qa-quick'},
@@ -177,34 +235,62 @@
       );
     };
 
+    const BookingPane = () => {
+      if (isUserLoggedIn) return h('div',{className:'qa-card'}, h('div',{className:'qa-note'}, 'Booking is only available for guests.'));
+      if (!calUrl)        return h('div',{className:'qa-card'}, h('div',{className:'qa-note'}, 'Booking link not configured yet.'));
+      return h('div',{className:'qa-book'}, h(CalendlyInline,{url:calUrl}));
+    };
+
+    const HomePathways = () => (
+      h('div', { className:'qa-home-stack' },
+        h('div',{className:'qa-card qa-action'},
+          h('div',{className:'qa-action-main'},
+            h('div',{className:'qa-action-title'},'Fill the form then click Start Chat to speak with Professor Farhat'),
+            h('div',{className:'qa-action-sub'},'(Guests must complete the form first)')
+          ),
+          h('button',{className:'qa-action-go',onClick:startChat,disabled:loadingStart||(!isUserLoggedIn&&!canStart)}, loadingStart?'Starting…':(started?'Go to Chat':'Start Chat'))
+        ),
+        (!isUserLoggedIn) && h('div',{className:'qa-card qa-action'},
+          h('div',{className:'qa-action-main'},
+            h('div',{className:'qa-action-title'},'Book a demo'),
+            h('div',{className:'qa-action-sub'},'Pick a time that suits you')
+          ),
+          h('button',{className:'qa-action-go',onClick:goToBooking}, 'Book now')
+        )
+      )
+    );
+
     return h('div',{className:'qa-floating'},
       h('button',{className:'qa-fab',onClick:()=>setIsOpen(o=>!o),'aria-label':isOpen?'Close chat':'Open chat'},h(IconChat,null)),
+
       isOpen && h('div',{className:'qa-panel'},
         h('div',{className:'qa-header'},
           h('div',{className:'qa-title'},headerTitle),
           h('button',{className:'qa-close',onClick:()=>setIsOpen(false),'aria-label':'Close'},h(IconClose,null))
         ),
+
         h('div',{className:'qa-body'},
+
           tab==='home' && h('div',{className:'qa-home'},
-            h('div',{className:'qa-card qa-action'},
-              h('div',{className:'qa-action-main'},
-                h('div',{className:'qa-action-title'},'Send us a message'),
-                h('div',{className:'qa-action-sub'},"We'll be back online on Monday")
-              ),
-              h('button',{className:'qa-action-go',onClick:startChat,disabled:loadingStart||(!isUserLoggedIn&&!canStart)},loadingStart?'Starting…':(started?'Go to Chat':'Start Chat'))
-            ),
+            h(HomePathways,null),
+
+            // Guest form (hide after chat starts)
             (!isUserLoggedIn && !started) && h('div',{className:'qa-card qa-guest'},
               h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_name'},'Your Name'),h('input',{id:'qa_g_name',type:'text',value:gName,onChange:e=>setGName(e.target.value),placeholder:'Jane Doe',required:true})),
               h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_email'},'Your Email'),h('input',{id:'qa_g_email',type:'email',value:gEmail,onChange:e=>setGEmail(e.target.value),placeholder:'jane@example.com',required:true})),
               h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_phone'},'Phone'),h('input',{id:'qa_g_phone',type:'tel',value:gPhone,onChange:e=>setGPhone(e.target.value),placeholder:'(555) 555-5555',required:true})),
               !!error && h('div',{className:'qa-error'},error)
             ),
+
             h(QuickReplies,null),
-            canSeeResources && h('div',{className:'qa-card'},
+
+            // Resources — mini accordion
+            (canSeeResources) && h('div',{className:'qa-card'},
               h('div',{className:'qa-section-title'},'Resources for Getting Started'),
-              (faqs.length ? h(FAQAccordion,{items:faqs}) : h('div',{className:'qa-empty'},'No FAQs found.'))
+              (faqs.length ? h(MiniAccordion,{items:faqs}) : h('div',{className:'qa-empty'},'No FAQs found.'))
             )
           ),
+
           tab==='messages' && h('div',{className:'qa-chat'},
             h('div',{className:'qa-chat-messages'},
               messages.map((m,i)=>h('div',{key:i,className:'qa-msg '+(m.sender==='user'?'from-user':'from-admin'),title:m.sender==='user'?visitorTooltip:''},
@@ -221,19 +307,24 @@
             ),
             !!error && h('div',{className:'qa-error qa-chat-error'},error)
           ),
-          (tab==='profile' && !isUserLoggedIn && started) && h('form',{className:'qa-card qa-profile',onSubmit:saveProfile},
+
+          (tab==='profile' && !isUserLoggedIn) && h('form',{className:'qa-card qa-profile',onSubmit:saveProfile},
             h('div',{className:'qa-section-title'},'Your profile'),
             h('div',{className:'qa-field'},h('label',{htmlFor:'qa_p_name'},'Name'),h('input',{id:'qa_p_name',type:'text',value:gName,onChange:e=>setGName(e.target.value),required:true})),
             h('div',{className:'qa-field'},h('label',{htmlFor:'qa_p_email'},'Email'),h('input',{id:'qa_p_email',type:'email',value:gEmail,onChange:e=>setGEmail(e.target.value),required:true})),
             h('div',{className:'qa-field'},h('label',{htmlFor:'qa_p_phone'},'Phone'),h('input',{id:'qa_p_phone',type:'tel',value:gPhone,onChange:e=>setGPhone(e.target.value),required:true})),
             h('div',{className:'qa-profile-actions'},h('button',{type:'submit',className:'qa-action-go',disabled:profileSaving},profileSaving?'Saving…':'Save')),
             !!profileMsg && h('div',{className:'qa-note'},profileMsg)
-          )
+          ),
+
+          (tab==='book') && h(BookingPane,null)
         ),
+
         h('div',{className:'qa-nav'},
           h('button',{className:'qa-tab'+(tab==='home'?' active':''),onClick:()=>setTab('home')},h(IconHome,null),h('span',null,'Home')),
           h('button',{className:'qa-tab'+(tab==='messages'?' active':''),onClick:()=>setTab('messages'),disabled:!started},h(IconChat,null),h('span',null,'Messages')),
-          (!isUserLoggedIn) && h('button',{className:'qa-tab'+(tab==='profile'?' active':''),onClick:()=>setTab('profile'),disabled:!started},h(IconUser,null),h('span',null,'Profile'))
+          (!isUserLoggedIn) && h('button',{className:'qa-tab'+(tab==='book'?' active':''),onClick:goToBooking},h(IconCalendar,null),h('span',null,'Book')),
+          (!isUserLoggedIn) && h('button',{className:'qa-tab'+(tab==='profile'?' active':''),onClick:()=>setTab('profile')},h(IconUser,null),h('span',null,'Profile'))
         )
       )
     );
@@ -243,5 +334,4 @@
     const mount = document.getElementById('qa-global-root');
     if (mount) render(h(GlobalWidget), mount);
   });
-
 })(window.wp);
