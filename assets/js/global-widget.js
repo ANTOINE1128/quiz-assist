@@ -50,36 +50,61 @@
     );
   }
 
-  /** Calendly inline embed (stable, no flicker) */
-  function CalendlyInline({ url }) {
+  /**
+   * Calendly inline embed — programmatic init (+ keep node mounted).
+   * This prevents the “white box” when switching tabs.
+   */
+  function CalendlyInline({ url, active }) {
     const ref = wp.element.useRef(null);
 
     useEffect(() => {
       if (!url || !ref.current) return;
 
-      // Ensure script loaded once
       const SRC = 'https://assets.calendly.com/assets/external/widget.js';
-      const already = document.querySelector(`script[src="${SRC}"]`);
-      if (!already) {
-        const s = document.createElement('script');
+      const CSS = 'https://assets.calendly.com/assets/external/widget.css';
+
+      // Ensure CSS present (prevents flash/blank in some themes)
+      if (!document.querySelector(`link[href="${CSS}"]`)) {
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = CSS;
+        document.head.appendChild(l);
+      }
+
+      const ensureInit = () => {
+        if (window.Calendly && window.Calendly.initInlineWidget) {
+          // Clear any previous iframe before re-init
+          while (ref.current.firstChild) ref.current.removeChild(ref.current.firstChild);
+
+          const u = url + (url.includes('?') ? '&' : '?')
+            + 'hide_event_type_details=1&hide_landing_page_details=1';
+
+          window.Calendly.initInlineWidget({
+            url: u,
+            parentElement: ref.current,
+            prefill: {},
+            utm: {}
+          });
+        }
+      };
+
+      // Load script once, then init/re-init
+      let s = document.querySelector(`script[src="${SRC}"]`);
+      if (!s) {
+        s = document.createElement('script');
         s.src = SRC;
         s.async = true;
-        s.onload = () => window.Calendly && window.Calendly.initInlineWidgets && window.Calendly.initInlineWidgets();
+        s.onload = ensureInit;
         document.head.appendChild(s);
       } else {
-        // If script exists and Calendly is ready, init widgets in case of re-mount
-        if (window.Calendly && window.Calendly.initInlineWidgets) {
-          window.Calendly.initInlineWidgets();
-        }
+        ensureInit();
       }
-    }, [url]);
+    }, [url, active]); // re-run when Book tab becomes active
 
-    // Note: data-url is Calendly's recommended way
+    // Keep mounted; only hide/show via CSS
     return h('div', {
       ref,
-      className: 'calendly-inline-widget',
-      'data-url': url + (url.includes('?') ? '&' : '?') + 'hide_event_type_details=1&hide_landing_page_details=1',
-      style: { minWidth: '320px', height: '520px' }
+      style: { minWidth: '320px', height: '520px', display: active ? 'block' : 'none' }
     });
   }
 
@@ -235,10 +260,16 @@
       );
     };
 
-    const BookingPane = () => {
-      if (isUserLoggedIn) return h('div',{className:'qa-card'}, h('div',{className:'qa-note'}, 'Booking is only available for guests.'));
-      if (!calUrl)        return h('div',{className:'qa-card'}, h('div',{className:'qa-note'}, 'Booking link not configured yet.'));
-      return h('div',{className:'qa-book'}, h(CalendlyInline,{url:calUrl}));
+    // Keep BookingPane mounted; just toggle "active"
+    const BookingPane = ({ active }) => {
+      const style = { display: active ? 'block' : 'none' };
+      if (isUserLoggedIn) {
+        return h('div',{className:'qa-card',style}, h('div',{className:'qa-note'}, 'Booking is only available for guests.'));
+      }
+      if (!calUrl) {
+        return h('div',{className:'qa-card',style}, h('div',{className:'qa-note'}, 'Booking link not configured yet.'));
+      }
+      return h('div',{className:'qa-book',style}, h(CalendlyInline,{url:calUrl,active}));
     };
 
     const HomePathways = () => (
@@ -317,9 +348,11 @@
             !!profileMsg && h('div',{className:'qa-note'},profileMsg)
           ),
 
-          (tab==='book') && h(BookingPane,null)
+          // IMPORTANT: keep BookingPane mounted; toggle "active"
+          h(BookingPane,{active: tab==='book'})
         ),
 
+        // Bottom nav
         h('div',{className:'qa-nav'},
           h('button',{className:'qa-tab'+(tab==='home'?' active':''),onClick:()=>setTab('home')},h(IconHome,null),h('span',null,'Home')),
           h('button',{className:'qa-tab'+(tab==='messages'?' active':''),onClick:()=>setTab('messages'),disabled:!started},h(IconChat,null),h('span',null,'Messages')),
