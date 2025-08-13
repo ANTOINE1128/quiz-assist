@@ -134,8 +134,9 @@ add_action( 'wp_enqueue_scripts', function() {
             'pollInterval'    => 2000,
             'isUserLoggedIn'  => is_user_logged_in(),
             'currentUserName' => is_user_logged_in() ? wp_get_current_user()->user_login : '',
-            'restNonce'       => wp_create_nonce( 'wp_rest' ),
-            // NEW: pass quick replies + Calendly URL
+            // IMPORTANT: only provide a REST nonce to logged-in users
+            'restNonce'       => is_user_logged_in() ? wp_create_nonce( 'wp_rest' ) : '',
+            // Quick replies + Calendly
             'globalActions'   => $opts['qa_global_actions'] ?? [],
             'calendlyUrl'     => trim( $opts['qa_calendly_url'] ?? '' ),
         ] );

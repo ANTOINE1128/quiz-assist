@@ -22,7 +22,7 @@ function qa_settings_init() {
     'qa_render_text',
     'quizAssist',
     'qa_section',
-    [ 'field'=>'qa_openai_key','type'=>'text' ]
+    [ 'field'=>'qa_openai_key','type'=>'password' ]
   );
 
   // 2) Model selector

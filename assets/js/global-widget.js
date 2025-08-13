@@ -9,8 +9,22 @@
     currentUserName,
     restNonce,
     globalActions,
-    calendlyUrl
+    calendlyUrl,
+    // optional custom headers (safe to ignore if unset)
+    publicHeader,
+    publicToken,
+    sessionHeader
   } = window.QA_Assist_Global_SETTINGS || {};
+
+  // ---------- small helpers ----------
+  // Build headers; ONLY add X-WP-Nonce for logged-in users (prevents "Cookie check failed" for guests)
+  function makeHeaders(extra, sessionToken) {
+    const h = Object.assign({ 'Accept': 'application/json' }, (extra || {}));
+    if (isUserLoggedIn && restNonce) h['X-WP-Nonce'] = restNonce;
+    if (publicHeader && publicToken) h[publicHeader] = publicToken;
+    if (sessionHeader && sessionToken) h[sessionHeader] = sessionToken;
+    return h;
+  }
 
   // Icons
   function IconHome(){return h('svg',{width:20,height:20,viewBox:'0 0 24 24',fill:'currentColor','aria-hidden':'true'},h('path',{d:'M12 3 3 10h2v10h5v-6h4v6h5V10h2L12 3z'}))}
@@ -50,10 +64,7 @@
     );
   }
 
-  /**
-   * Calendly inline embed — programmatic init (+ keep node mounted).
-   * This prevents the “white box” when switching tabs.
-   */
+  /** Calendly inline embed */
   function CalendlyInline({ url, active }) {
     const ref = wp.element.useRef(null);
 
@@ -63,7 +74,6 @@
       const SRC = 'https://assets.calendly.com/assets/external/widget.js';
       const CSS = 'https://assets.calendly.com/assets/external/widget.css';
 
-      // Ensure CSS present (prevents flash/blank in some themes)
       if (!document.querySelector(`link[href="${CSS}"]`)) {
         const l = document.createElement('link');
         l.rel = 'stylesheet';
@@ -73,22 +83,12 @@
 
       const ensureInit = () => {
         if (window.Calendly && window.Calendly.initInlineWidget) {
-          // Clear any previous iframe before re-init
           while (ref.current.firstChild) ref.current.removeChild(ref.current.firstChild);
-
-          const u = url + (url.includes('?') ? '&' : '?')
-            + 'hide_event_type_details=1&hide_landing_page_details=1';
-
-          window.Calendly.initInlineWidget({
-            url: u,
-            parentElement: ref.current,
-            prefill: {},
-            utm: {}
-          });
+          const u = url + (url.includes('?') ? '&' : '?') + 'hide_event_type_details=1&hide_landing_page_details=1';
+          window.Calendly.initInlineWidget({ url: u, parentElement: ref.current, prefill: {}, utm: {} });
         }
       };
 
-      // Load script once, then init/re-init
       let s = document.querySelector(`script[src="${SRC}"]`);
       if (!s) {
         s = document.createElement('script');
@@ -99,13 +99,9 @@
       } else {
         ensureInit();
       }
-    }, [url, active]); // re-run when Book tab becomes active
+    }, [url, active]);
 
-    // Keep mounted; only hide/show via CSS
-    return h('div', {
-      ref,
-      style: { minWidth: '320px', height: '520px', display: active ? 'block' : 'none' }
-    });
+    return h('div', { ref, style: { minWidth: '320px', height: '520px', display: active ? 'block' : 'none' } });
   }
 
   function GlobalWidget(){
@@ -118,6 +114,9 @@
     const [faqs,setFaqs]=useState([]);
     const [error,setError]=useState('');
     const [loadingStart,setLoadingStart]=useState(false);
+
+    // optional session token plumbing (no-op if backend doesn't use it)
+    const [sessionToken, setSessionToken] = useState('');
 
     // Guest profile (powers guest form too)
     const [gName,setGName]=useState('');
@@ -141,12 +140,19 @@
     useEffect(()=>{
       const sid=localStorage.getItem('qa_chat_session');
       const meta=JSON.parse(localStorage.getItem('qa_chat_session_meta')||'{}');
+      const tok=localStorage.getItem('qa_chat_token');
       if(meta && !isUserLoggedIn){
         if(meta.name) setGName(meta.name);
         if(meta.email) setGEmail(meta.email);
         if(meta.phone) setGPhone(meta.phone);
       }
-      if(sid){ setSessionId(sid); setStarted(true); setIsOpen(true); setTab('messages'); }
+      if(sid){
+        setSessionId(sid);
+        if(tok) setSessionToken(tok);
+        setStarted(true);
+        setIsOpen(true);
+        setTab('messages');
+      }
     },[]);
 
     // Persist guest meta as they type
@@ -160,7 +166,10 @@
     useEffect(()=>{
       const canSeeResources=isUserLoggedIn||started;
       if(!isOpen||!canSeeResources||faqs.length) return;
-      fetch(`${apiBase}/chat/faqs`,{credentials:'same-origin',headers:{'Accept':'application/json'}})
+      fetch(`${apiBase}/chat/faqs`,{
+        credentials:'same-origin',
+        headers: makeHeaders()
+      })
         .then(r=>r.json())
         .then(d=>Array.isArray(d.faqs)?setFaqs(d.faqs.slice(0,50)):setFaqs([]))
         .catch(()=>setFaqs([]));
@@ -173,14 +182,22 @@
       const load=()=>{
         if(document.hidden) return;
         fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`,{
-          method:'GET',credentials:'same-origin',headers:{'X-WP-Nonce':restNonce||'','Accept':'application/json'}
+          method:'GET',
+          credentials:'same-origin',
+          headers: makeHeaders({}, sessionToken)
         })
           .then(r=>{if(!r.ok) throw new Error('no_session'); return r.json();})
           .then(d=>setMessages(Array.isArray(d.messages)?d.messages:[]))
           .catch(err=>{
             if(String(err.message)==='no_session'){
-              localStorage.removeItem('qa_chat_session'); localStorage.removeItem('qa_chat_session_meta');
-              setSessionId(''); setStarted(false); setTab('home'); setError('Your session expired. Please start a new chat.');
+              localStorage.removeItem('qa_chat_session');
+              localStorage.removeItem('qa_chat_session_meta');
+              localStorage.removeItem('qa_chat_token');
+              setSessionId('');
+              setSessionToken('');
+              setStarted(false);
+              setTab('home');
+              setError('Your session expired. Please start a new chat.');
             }
           });
       };
@@ -189,7 +206,7 @@
       const onVis=()=>{clearInterval(timer); if(!document.hidden){load(); timer=setInterval(load,pollInterval||2000);}};
       document.addEventListener('visibilitychange',onVis);
       return ()=>{clearInterval(timer); document.removeEventListener('visibilitychange',onVis);};
-    },[started,sessionId]);
+    },[started,sessionId,sessionToken]);
 
     function startChat(){
       setError('');
@@ -202,15 +219,26 @@
       setLoadingStart(true);
       const payload=isUserLoggedIn?{}:{guest_name:gName.trim(),guest_email:gEmail.trim(),guest_phone:gPhone.trim()};
       fetch(`${apiBase}/chat/start`,{
-        method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':restNonce||''},
+        method:'POST',
+        credentials:'same-origin',
+        headers: makeHeaders({'Content-Type':'application/json'}),
         body:JSON.stringify(payload||{})
       })
         .then(async r=>{if(!r.ok){const j=await r.json().catch(()=>null);throw new Error(j?.message||'Could not start chat.');} return r.json();})
         .then(d=>{
           const sid=String(d.session_id||''); if(!sid) throw new Error('Could not start chat.');
-          setSessionId(sid); setStarted(true); setTab('messages'); localStorage.setItem('qa_chat_session',sid);
-          if(!isUserLoggedIn){ localStorage.setItem('qa_chat_session_meta',JSON.stringify({name:gName.trim(),email:gEmail.trim(),phone:gPhone.trim()})); }
-          else{ localStorage.removeItem('qa_chat_session_meta'); }
+          const tok = d.session_token ? String(d.session_token) : '';
+          setSessionId(sid);
+          setStarted(true);
+          setTab('messages');
+          localStorage.setItem('qa_chat_session',sid);
+          if(tok){ setSessionToken(tok); localStorage.setItem('qa_chat_token', tok); }
+          else { localStorage.removeItem('qa_chat_token'); setSessionToken(''); }
+          if(!isUserLoggedIn){
+            localStorage.setItem('qa_chat_session_meta',JSON.stringify({name:gName.trim(),email:gEmail.trim(),phone:gPhone.trim()}));
+          } else {
+            localStorage.removeItem('qa_chat_session_meta');
+          }
         })
         .catch(e=>setError(e.message||'Could not start chat. Please try again.'))
         .finally(()=>setLoadingStart(false));
@@ -224,7 +252,9 @@
       if(!sessionId){ setTab('home'); setError('Your session expired. Please start a new chat.'); return; }
       setMessages(prev=>[...prev,{sender:'user',message,created_at:new Date().toLocaleTimeString()}]); setInput('');
       fetch(`${apiBase}/chat/send`,{
-        method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-WP-Nonce':restNonce||''},
+        method:'POST',
+        credentials:'same-origin',
+        headers: makeHeaders({'Content-Type':'application/json'}, sessionToken),
         body:JSON.stringify({session_id:sessionId,message})
       }).then(r=>{if(!r.ok) throw new Error('send_failed');})
         .catch(()=>{ setMessages(prev=>prev.filter(m=>!(m.sender==='user'&&m.message===message))); setError('Failed to send. Please try again.'); });
@@ -265,7 +295,7 @@
       const style = { display: active ? 'block' : 'none' };
       if (isUserLoggedIn) {
         return h('div',{className:'qa-card',style}, h('div',{className:'qa-note'}, 'Booking is only available for guests.'));
-      }
+        }
       if (!calUrl) {
         return h('div',{className:'qa-card',style}, h('div',{className:'qa-note'}, 'Booking link not configured yet.'));
       }
@@ -348,7 +378,7 @@
             !!profileMsg && h('div',{className:'qa-note'},profileMsg)
           ),
 
-          // IMPORTANT: keep BookingPane mounted; toggle "active"
+          // Keep BookingPane mounted; toggle "active"
           h(BookingPane,{active: tab==='book'})
         ),
 
