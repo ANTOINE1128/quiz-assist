@@ -100,18 +100,25 @@ function qa_check_guest_fp( $session_user_id, $sid ) {
  * - Guest session: must NOT be logged in and must match fingerprint.
  */
 function qa_can_access_session( $row ) {
+    // Admins can view any session (user or guest) in the dashboard.
+    // This is safe because admin requests carry a valid REST nonce.
+    if ( current_user_can( 'manage_options' ) ) {
+        return true;
+    }
+
     $current = get_current_user_id();
     $row_uid = (int) $row->user_id;
     $sid     = (int) $row->id;
 
+    // Logged-in user sessions: must match owner
     if ( $row_uid > 0 ) {
         if ( $current !== $row_uid ) {
             return new WP_Error( 'forbidden', 'This chat belongs to a different user.', [ 'status' => 403 ] );
         }
-        return true; // owner ok
+        return true;
     }
 
-    // guest session
+    // Guest sessions: only accessible to guests matching the fingerprint
     if ( $current > 0 ) {
         return new WP_Error( 'forbidden', 'This guest chat cannot be accessed while logged in.', [ 'status' => 403 ] );
     }

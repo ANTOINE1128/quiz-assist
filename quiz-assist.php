@@ -4,7 +4,7 @@
  * Description: AI-powered quiz assistant + site chat for FarhatLectures.
  * Version:     2.5 | By Antoine Makdessy FINAL-TEST
  */
-
+if ( ! defined( 'ABSPATH' ) ) exit;
 define( 'QA_DIR', __DIR__ . '/' );
 define( 'QA_URL', plugin_dir_url( __FILE__ ) );
 
