@@ -25,28 +25,25 @@
       sessionHeader: PAGE.sessionHeader || '',
       widgetEnabled: (typeof PAGE.widgetEnabled === 'boolean') ? PAGE.widgetEnabled : true,
       pollInterval: PAGE.pollInterval || 2000,
+      enableQuickReplies: (typeof PAGE.enableQuickReplies === 'boolean') ? PAGE.enableQuickReplies : true, // << NEW
     };
 
-    // Try to fetch public config (cache-busting, quick replies, etc.)
+    // Try to fetch public config (server-driven config).
     try {
       const headers = { Accept: 'application/json' };
-      // If logged-in, send the REST nonce so WP can see the user in the REST request.
       if (base.isUserLoggedIn && base.restNonce) headers['X-WP-Nonce'] = base.restNonce;
 
       const res = await fetch(CONFIG_URL, { credentials: 'same-origin', headers });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const remote = await res.json();
 
-      // Merge: NEVER let remote override auth-critical fields.
       return {
-        // non-auth values from remote
         ...remote,
-        // auth & critical values from base take precedence
+        // Keep auth-critical values from base:
         apiBase: base.apiBase || remote.apiBase || '/wp-json/quiz-assist/v1',
         isUserLoggedIn: base.isUserLoggedIn,
         currentUserName: base.currentUserName || remote.currentUserName || '',
         restNonce: base.isUserLoggedIn ? (base.restNonce || remote.restNonce || '') : '',
-        // client buttons / calendly can come from either; prefer PAGE if present
         globalActions: base.globalActions.length ? base.globalActions : (remote.globalActions || []),
         calendlyUrl: base.calendlyUrl || remote.calendlyUrl || '',
         publicHeader: base.publicHeader || remote.publicHeader || '',
@@ -54,9 +51,9 @@
         sessionHeader: base.sessionHeader || remote.sessionHeader || '',
         widgetEnabled: (typeof remote.widgetEnabled === 'boolean') ? remote.widgetEnabled : base.widgetEnabled,
         pollInterval: base.pollInterval || remote.pollInterval || 2000,
+        enableQuickReplies: (typeof remote.enableQuickReplies === 'boolean') ? remote.enableQuickReplies : base.enableQuickReplies, // << NEW
       };
     } catch (e) {
-      // Fall back to PAGE only (still fully functional)
       console.error('QA Assist: config fetch failed. Using PAGE settings.', e);
       return base;
     }
@@ -173,6 +170,7 @@
       publicHeader,
       publicToken,
       sessionHeader,
+      enableQuickReplies = true, // << NEW
     } = cfg || {};
 
     // --- storage namespace: separate for guest vs logged-in ---
@@ -217,7 +215,8 @@
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileMsg, setProfileMsg] = useState('');
 
-    const quickReplies = (globalActions || [])
+    // Build quick replies list, but honor the enableQuickReplies toggle:
+    const quickReplies = (enableQuickReplies ? globalActions : [])
       .filter(a => a && a.label && a.user)
       .map(a => ({ label: a.label, text: a.user }));
 
@@ -396,6 +395,7 @@
     const canSeeResources = isUserLoggedIn || started;
 
     const QuickReplies = () => {
+      if (!enableQuickReplies) return null; // << respect toggle
       const disabled = !isUserLoggedIn && !started;
       if (!quickReplies.length) return null;
       return h('div',{className:'qa-card'},
@@ -477,7 +477,8 @@
                 m._tempId ? h('div',{className:'qa-msg-sending'},'Sending…') : null
               ))
             ),
-            ((isUserLoggedIn||started)&&quickReplies.length) && h('div',{className:'qa-quick qa-quick-row'},
+            // row of quick replies under the messages list (respect toggle)
+            ((isUserLoggedIn||started) && enableQuickReplies && quickReplies.length) && h('div',{className:'qa-quick qa-quick-row'},
               quickReplies.map((q,i)=>h('button',{key:q.label+'|'+i,className:'qa-chip-btn',onClick:()=>sendMessageText(q.text),title:`Send: ${q.text}`},q.label))
             ),
             h('div',{className:'qa-chat-input'},

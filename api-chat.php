@@ -416,22 +416,25 @@ function qa_chat_get_config( WP_REST_Request $req ) {
     $is_logged_in = is_user_logged_in();
     $user_name    = $is_logged_in ? wp_get_current_user()->display_name : '';
 
+    // Widget + Quick-replies toggles (both default to enabled when unset)
     $widget_enabled = ! isset( $opts['qa_enable_global_chat'] ) || ! empty( $opts['qa_enable_global_chat'] );
+    $qr_enabled     = ! isset( $opts['qa_enable_quick_replies'] ) || ! empty( $opts['qa_enable_quick_replies'] );
 
     return [
-        'apiBase'         => rtrim( get_rest_url( null, 'quiz-assist/v1' ), '/' ),
-        'pollInterval'    => 2000,
-        'isUserLoggedIn'  => (bool) $is_logged_in,
-        'currentUserName' => (string) $user_name,
-        'restNonce'       => $is_logged_in ? wp_create_nonce( 'wp_rest' ) : '',
-        'globalActions'   => isset($opts['qa_global_actions']) && is_array($opts['qa_global_actions'])
-                              ? array_values($opts['qa_global_actions'])
-                              : [],
-        'calendlyUrl'     => trim( $opts['qa_calendly_url'] ?? '' ),
-        'publicHeader'    => '',
-        'publicToken'     => '',
-        'sessionHeader'   => '',
-        'widgetEnabled'   => (bool) $widget_enabled,
+        'apiBase'             => rtrim( get_rest_url( null, 'quiz-assist/v1' ), '/' ),
+        'pollInterval'        => 2000,
+        'isUserLoggedIn'      => (bool) $is_logged_in,
+        'currentUserName'     => (string) $user_name,
+        'restNonce'           => $is_logged_in ? wp_create_nonce( 'wp_rest' ) : '',
+        'globalActions'       => isset($opts['qa_global_actions']) && is_array($opts['qa_global_actions'])
+                                  ? array_values($opts['qa_global_actions'])
+                                  : [],
+        'calendlyUrl'         => trim( $opts['qa_calendly_url'] ?? '' ),
+        'publicHeader'        => '',
+        'publicToken'         => '',
+        'sessionHeader'       => '',
+        'widgetEnabled'       => (bool) $widget_enabled,
+        'enableQuickReplies'  => (bool) $qr_enabled, // <<< added for the checkbox
     ];
 }
 

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Quiz Assist
  * Description: AI-powered quiz assistant + site chat for FarhatLectures.
- * Version:     2.5 | By Antoine Makdessy --test mode
+ * Version:     2.5 | By Antoine Makdessy FINAL-TEST
  */
 
 define( 'QA_DIR', __DIR__ . '/' );
@@ -104,8 +104,11 @@ add_action( 'wp_enqueue_scripts', function() {
   // ========= GLOBAL CHAT (everywhere EXCEPT quiz & topic pages) =========
   if ( ! $is_quiz && ! $is_topic ) {
     $opts = get_option( 'quiz_assist_options', [] );
+
     // Enabled by default if unset
     $widget_enabled = ! isset( $opts['qa_enable_global_chat'] ) || ! empty( $opts['qa_enable_global_chat'] );
+    // Quick-replies enabled by default if unset
+    $qr_enabled     = ! isset( $opts['qa_enable_quick_replies'] ) || ! empty( $opts['qa_enable_quick_replies'] );
 
     if ( $widget_enabled ) {
       wp_enqueue_script(
@@ -132,13 +135,15 @@ add_action( 'wp_enqueue_scripts', function() {
 
       // Legacy fallback payload (used only if /public-config fails)
       wp_localize_script( 'qa-global-widget', 'QA_Assist_Global_SETTINGS', [
-        'apiBase'         => rtrim( rest_url( 'quiz-assist/v1' ), '/' ),
-        'pollInterval'    => 2000,
-        'isUserLoggedIn'  => is_user_logged_in(),
-        'currentUserName' => is_user_logged_in() ? wp_get_current_user()->user_login : '',
-        'restNonce'       => is_user_logged_in() ? wp_create_nonce( 'wp_rest' ) : '',
-        'globalActions'   => $opts['qa_global_actions'] ?? [],
-        'calendlyUrl'     => trim( $opts['qa_calendly_url'] ?? '' ),
+        'apiBase'             => rtrim( rest_url( 'quiz-assist/v1' ), '/' ),
+        'pollInterval'        => 2000,
+        'isUserLoggedIn'      => is_user_logged_in(),
+        'currentUserName'     => is_user_logged_in() ? wp_get_current_user()->user_login : '',
+        'restNonce'           => is_user_logged_in() ? wp_create_nonce( 'wp_rest' ) : '',
+        'globalActions'       => $opts['qa_global_actions'] ?? [],
+        'calendlyUrl'         => trim( $opts['qa_calendly_url'] ?? '' ),
+        'enableQuickReplies'  => (bool) $qr_enabled,          // <<<<<< NEW
+        'widgetEnabled'       => (bool) $widget_enabled,      // kept here so PAGE can still hide if needed
       ] );
     }
   }
