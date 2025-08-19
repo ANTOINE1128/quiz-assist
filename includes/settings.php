@@ -8,70 +8,84 @@ add_action( 'admin_init', 'qa_settings_init' );
 function qa_settings_init() {
   register_setting( 'quizAssist', 'quiz_assist_options', 'qa_sanitize_options' );
 
-  add_settings_section(
-    'qa_section',
-    'Quiz Assist Settings',
-    '__return_false',
-    'quizAssist'
-  );
+  // -------- Sections --------
+  add_settings_section('qa_section_core',   'Core / API',                       'qa_section_desc_core',   'quizAssist');
+  add_settings_section('qa_section_global', 'Global Chat (Floating site-wide)', 'qa_section_desc_global', 'quizAssist');
+  add_settings_section('qa_section_quiz',   'Quiz Widget (quiz pages only)',    'qa_section_desc_quiz',   'quizAssist');
 
-  // 1) API Key
-  add_settings_field(
-    'qa_openai_key',
-    'OpenAI API Key',
-    'qa_render_text',
-    'quizAssist',
-    'qa_section',
+  // ===== Core / API =====
+  add_settings_field('qa_openai_key', 'OpenAI API Key', 'qa_render_text',  'quizAssist', 'qa_section_core',
     [ 'field'=>'qa_openai_key','type'=>'password' ]
   );
+  add_settings_field('qa_model', 'OpenAI Model', 'qa_render_model', 'quizAssist', 'qa_section_core');
 
-  // 2) Model selector
-  add_settings_field(
-    'qa_model',
-    'OpenAI Model',
-    'qa_render_model',
-    'quizAssist',
-    'qa_section'
-  );
+  // ===== Global Chat =====
+  add_settings_field('qa_enable_global_chat',     'Enable Global Chat',                 'qa_render_enable_chat',         'quizAssist', 'qa_section_global');
+  add_settings_field('qa_widget_offset',          'Global Chat Bottom Offset (px)',     'qa_render_widget_offset',       'quizAssist', 'qa_section_global');
+  add_settings_field('qa_enable_quick_replies',   'Enable Quick Chats (Quick-Replies)', 'qa_render_enable_quickreplies', 'quizAssist', 'qa_section_global');
+  add_settings_field('qa_global_actions',         'Quick-Replies (buttons)',            'qa_render_global_actions',      'quizAssist', 'qa_section_global');
+  add_settings_field('qa_faqs',                   'FAQs (Resources)',                   'qa_render_faqs',                'quizAssist', 'qa_section_global');
+  add_settings_field('qa_calendly_url',           'Calendly URL (Guest Booking)',       'qa_render_calendly_url',        'quizAssist', 'qa_section_global');
 
-  // 3) Quiz-widget buttons
-  add_settings_field(
-    'qa_quiz_actions',
-    'Quiz Widget Actions',
-    'qa_render_actions',
-    'quizAssist',
-    'qa_section'
-  );
-
-  // 4) Global-chat quick replies (Label + Message)
-  add_settings_field(
-    'qa_global_actions',
-    'Global Chat Quick-Replies',
-    'qa_render_global_actions',
-    'quizAssist',
-    'qa_section'
-  );
-
-  // 5) FAQs (Resources)
-  add_settings_field(
-    'qa_faqs',
-    'FAQs (Resources)',
-    'qa_render_faqs',
-    'quizAssist',
-    'qa_section'
-  );
-
-  // 6) NEW — Calendly URL for “Book a demo” (guest only)
-  add_settings_field(
-    'qa_calendly_url',
-    'Calendly URL (Guest Booking)',
-    'qa_render_calendly_url',
-    'quizAssist',
-    'qa_section'
-  );
+  // ===== Quiz Widget =====
+  add_settings_field('qa_quiz_actions', 'Quiz Widget Actions', 'qa_render_actions', 'quizAssist', 'qa_section_quiz');
 }
 
-/** Renders a simple <input> */
+/** -------- Section descriptions -------- */
+function qa_section_desc_core() {
+  echo '<p>API credentials and model selection used by Quiz Assist.</p>';
+}
+function qa_section_desc_global() {
+  echo '<p>Settings for the floating site-wide chat shown on non-quiz pages.</p>';
+}
+function qa_section_desc_quiz() {
+  echo '<p>Buttons and prompts used inside the quiz page widget.</p>';
+}
+
+/** -------- Renderers -------- */
+
+/** Checkbox: Enable Global Chat */
+function qa_render_enable_chat() {
+  $opts    = get_option( 'quiz_assist_options', [] );
+  // default to enabled when option not set
+  $enabled = ! isset( $opts['qa_enable_global_chat'] ) || ! empty( $opts['qa_enable_global_chat'] );
+  ?>
+  <label>
+    <input type="checkbox" name="quiz_assist_options[qa_enable_global_chat]" value="1" <?php checked( $enabled ); ?> />
+    Turn the floating site-wide chat on (hidden on quiz/topic pages automatically).
+  </label>
+  <p class="description">Uncheck to hide the blue chat button and panel everywhere.</p>
+  <?php
+}
+
+/** Number: FAB bottom offset */
+function qa_render_widget_offset() {
+  $opts   = get_option( 'quiz_assist_options', [] );
+  $offset = isset( $opts['qa_widget_offset'] ) ? (int) $opts['qa_widget_offset'] : 86;
+  ?>
+  <input type="number" min="0" max="500" step="1"
+         name="quiz_assist_options[qa_widget_offset]"
+         value="<?php echo esc_attr( $offset ); ?>"
+         class="small-text" />
+  <p class="description">Moves the blue chat button upward from the bottom-right. Default: 86.</p>
+  <?php
+}
+
+/** Checkbox: Enable Quick-Replies */
+function qa_render_enable_quickreplies() {
+  $opts    = get_option( 'quiz_assist_options', [] );
+  // default to enabled when option not set
+  $enabled = ! isset( $opts['qa_enable_quick_replies'] ) || ! empty( $opts['qa_enable_quick_replies'] );
+  ?>
+  <label>
+    <input type="checkbox" name="quiz_assist_options[qa_enable_quick_replies]" value="1" <?php checked( $enabled ); ?> />
+    Show Quick-Reply buttons in the Global Chat.
+  </label>
+  <p class="description">Uncheck to completely hide the Quick-Reply (Quick Chat) buttons for all visitors.</p>
+  <?php
+}
+
+/** Simple <input> */
 function qa_render_text( $args ) {
   $opts = get_option( 'quiz_assist_options', [] );
   $val  = isset( $opts[ $args['field'] ] ) ? trim( $opts[ $args['field'] ] ) : '';
@@ -114,16 +128,12 @@ function qa_render_model() {
 
   echo '<select name="quiz_assist_options[qa_model]">';
   foreach ( $models as $m ) {
-    printf(
-      '<option value="%1$s"%2$s>%1$s</option>',
-      esc_attr( $m ),
-      selected( $current, $m, false )
-    );
+    printf('<option value="%1$s"%2$s>%1$s</option>', esc_attr( $m ), selected( $current, $m, false ));
   }
   echo '</select>';
 }
 
-/** Quiz-widget actions repeater (unchanged) */
+/** Quiz-widget actions repeater (correct field names) */
 function qa_render_actions() {
   $opts    = get_option( 'quiz_assist_options', [] );
   $actions = $opts['qa_quiz_actions'] ?? [];
@@ -203,7 +213,7 @@ function qa_render_global_actions() {
   $actions = $opts['qa_global_actions'] ?? [];
   ?>
   <div class="qa-card">
-    <p class="description">Quick reply buttons for the global chat. Clicking a button sends the <em>Message</em> as if the user typed it.</p>
+    <p class="description">Quick-reply buttons for the Global Chat. <strong>Tip:</strong> disable them entirely with the checkbox above.</p>
     <table id="qa-global-actions-table" class="widefat striped">
       <thead>
         <tr><th style="width:220px;">Label</th><th>Message</th><th style="width:90px;">Remove</th></tr>
@@ -321,7 +331,7 @@ function qa_render_faqs() {
   <?php
 }
 
-/** NEW — Calendly URL field */
+/** Calendly URL field */
 function qa_render_calendly_url() {
   $opts = get_option( 'quiz_assist_options', [] );
   $val  = trim( $opts['qa_calendly_url'] ?? '' );
@@ -332,27 +342,37 @@ function qa_render_calendly_url() {
   <?php
 }
 
-/** Sanitize settings */
+/** -------- Sanitize -------- */
 function qa_sanitize_options( $input ) {
   $clean = [];
 
-  $clean['qa_openai_key']   = sanitize_text_field( trim( $input['qa_openai_key'] ?? '' ) );
-  $clean['qa_model']        = sanitize_text_field( trim( $input['qa_model'] ?? 'gpt-4' ) );
+  // Global chat toggles
+  $clean['qa_enable_global_chat']   = isset( $input['qa_enable_global_chat'] )   ? 1 : 0;
+  $clean['qa_enable_quick_replies'] = isset( $input['qa_enable_quick_replies'] ) ? 1 : 0;
 
-  // quiz actions
+  $offset = isset( $input['qa_widget_offset'] ) ? (int) $input['qa_widget_offset'] : 86;
+  if ( $offset < 0 )   $offset = 0;
+  if ( $offset > 500 ) $offset = 500;
+  $clean['qa_widget_offset'] = $offset;
+
+  // Core
+  $clean['qa_openai_key'] = sanitize_text_field( trim( $input['qa_openai_key'] ?? '' ) );
+  $clean['qa_model']      = sanitize_text_field( trim( $input['qa_model'] ?? 'gpt-4' ) );
+
+  // Quiz actions (keep row when label+user exist; sys optional)
   $clean['qa_quiz_actions'] = [];
   if ( ! empty( $input['qa_quiz_actions'] ) && is_array( $input['qa_quiz_actions'] ) ) {
     foreach ( $input['qa_quiz_actions'] as $act ) {
       $lab = sanitize_text_field( trim( $act['label'] ?? '' ) );
       $sys = wp_kses_post(      trim( $act['sys']   ?? '' ) );
       $usr = wp_kses_post(      trim( $act['user']  ?? '' ) );
-      if ( $lab && $sys && $usr ) {
+      if ( $lab && $usr ) {
         $clean['qa_quiz_actions'][] = [ 'label'=>$lab, 'sys'=>$sys, 'user'=>$usr ];
       }
     }
   }
 
-  // global quick replies: label + user(message)
+  // Global quick replies
   $clean['qa_global_actions'] = [];
   if ( ! empty( $input['qa_global_actions'] ) && is_array( $input['qa_global_actions'] ) ) {
     foreach ( $input['qa_global_actions'] as $act ) {
@@ -364,7 +384,7 @@ function qa_sanitize_options( $input ) {
     }
   }
 
-  // faqs
+  // FAQs
   $clean['qa_faqs'] = [];
   if ( ! empty( $input['qa_faqs'] ) && is_array( $input['qa_faqs'] ) ) {
     foreach ( $input['qa_faqs'] as $f ) {
@@ -374,7 +394,7 @@ function qa_sanitize_options( $input ) {
     }
   }
 
-  // NEW: Calendly URL
+  // Calendly URL
   $url = trim( $input['qa_calendly_url'] ?? '' );
   $clean['qa_calendly_url'] = $url ? esc_url_raw( $url ) : '';
 

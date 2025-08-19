@@ -48,3 +48,7 @@
   background: #f5c6cb;
   color: #721c24 !important;
 }
+#qa-chat-messages .qa-pending .qa-line.pending {
+  opacity: 0.7;
+  font-style: italic;
+}
