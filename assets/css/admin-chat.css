@@ -1,0 +1,54 @@
+/* Chats screen tweaks */
+.qa-admin-chat-box {
+  border: 1px solid #ddd;
+  padding: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.qa-admin-chat-box .qa-line { margin: 0 0 6px; }
+.qa-admin-chat-box .qa-line.admin strong { color: #0052cc; }
+.qa-admin-chat-box .qa-line.user  strong { color: #111; }
+
+.qa-admin-chat-box .qa-ts {
+  font-size: 11px;
+  color: #666;
+  margin-left: 8px;
+}
+
+.qa-reply-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+}
+
+.unread-badge {
+  background: #d63333;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.qa-sessions-table td.qa-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.qa-sessions-table td.qa-actions .button { margin-left: 6px; }
+
+.qa-sessions-table a.button-link-delete {
+  background: #f8d7da;
+  color: #721c24 !important;
+  border-color: #f1b0b7;
+}
+.qa-sessions-table a.button-link-delete:hover {
+  background: #f5c6cb;
+  color: #721c24 !important;
+}
+#qa-chat-messages .qa-pending .qa-line.pending {
+  opacity: 0.7;
+  font-style: italic;
+}
