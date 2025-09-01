@@ -5,14 +5,13 @@
   const { render } = wp.element;
 
   // -------- boot options --------
-  const PAGE = window.QA_Assist_Global_SETTINGS || {}; // localized from PHP (has real login state)
+  const PAGE = window.QA_Assist_Global_SETTINGS || {};
   const BOOT = window.QA_Assist_BOOT || {};
   const CONFIG_URL = BOOT.configEndpoint || '/wp-json/quiz-assist/v1/public-config';
-  const fabOffset = Number(BOOT.fabOffset) || 86;   // lift the FAB up a bit
-  const panelLift = Number(BOOT.panelLift)  || 70;  // panel sits above FAB
+  const fabOffset = Number(BOOT.fabOffset) || 86;
+  const panelLift  = Number(BOOT.panelLift)  || 70;
 
   async function fetchPublicConfigWithMerge() {
-    // Start with PAGE (authoritative for auth-related fields).
     const base = {
       apiBase: PAGE.apiBase || '/wp-json/quiz-assist/v1',
       isUserLoggedIn: !!PAGE.isUserLoggedIn,
@@ -25,47 +24,38 @@
       sessionHeader: PAGE.sessionHeader || '',
       widgetEnabled: (typeof PAGE.widgetEnabled === 'boolean') ? PAGE.widgetEnabled : true,
       pollInterval: PAGE.pollInterval || 2000,
-      enableQuickReplies: (typeof PAGE.enableQuickReplies === 'boolean') ? PAGE.enableQuickReplies : true, // << NEW
+      enableQuickReplies: (typeof PAGE.enableQuickReplies === 'boolean') ? PAGE.enableQuickReplies : true,
     };
 
-    // Try to fetch public config (server-driven config).
     try {
-      const headers = { Accept: 'application/json' };
-      if (base.isUserLoggedIn && base.restNonce) headers['X-WP-Nonce'] = base.restNonce;
-
-      const res = await fetch(CONFIG_URL, { credentials: 'same-origin', headers });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const res = await fetch(CONFIG_URL, { credentials: 'same-origin', cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status);
       const remote = await res.json();
-
       return {
         ...remote,
-        // Keep auth-critical values from base:
-        apiBase: base.apiBase || remote.apiBase || '/wp-json/quiz-assist/v1',
+        apiBase: base.apiBase,
         isUserLoggedIn: base.isUserLoggedIn,
-        currentUserName: base.currentUserName || remote.currentUserName || '',
-        restNonce: base.isUserLoggedIn ? (base.restNonce || remote.restNonce || '') : '',
-        globalActions: base.globalActions.length ? base.globalActions : (remote.globalActions || []),
-        calendlyUrl: base.calendlyUrl || remote.calendlyUrl || '',
-        publicHeader: base.publicHeader || remote.publicHeader || '',
-        publicToken: base.publicToken || remote.publicToken || '',
-        sessionHeader: base.sessionHeader || remote.sessionHeader || '',
-        widgetEnabled: (typeof remote.widgetEnabled === 'boolean') ? remote.widgetEnabled : base.widgetEnabled,
-        pollInterval: base.pollInterval || remote.pollInterval || 2000,
-        enableQuickReplies: (typeof remote.enableQuickReplies === 'boolean') ? remote.enableQuickReplies : base.enableQuickReplies, // << NEW
+        currentUserName: base.currentUserName,
+        restNonce: base.restNonce,
+        sessionHeader: base.sessionHeader,
+        pollInterval: base.pollInterval,
+        enableQuickReplies: base.enableQuickReplies
       };
-    } catch (e) {
-      console.error('QA Assist: config fetch failed. Using PAGE settings.', e);
+    } catch (_) {
       return base;
     }
   }
 
-  // ---------- helpers ----------
+  // ---------- utils ----------
+  const sk = (k) => `qa_gl_${k}`;
+  function makeHeaders(extra = {}) {
+    const h = Object.assign({ 'Accept': 'application/json' }, extra || {});
+    const nonce = (PAGE && PAGE.restNonce) ? PAGE.restNonce : '';
+    if (nonce) h['X-WP-Nonce'] = nonce;
+    return h;
+  }
   function keyFor(m) {
-    if (m && typeof m.id !== 'undefined' && m.id !== null) return 'id:' + String(m.id);
-    if (m && m._tempId) return 'tmp:' + m._tempId;
-    const s = (m?.sender||'') + '|' + (m?.created_at||'') + '|' +
-              String(m?.message||'').length + '|' + String(m?.message||'').slice(0,20);
-    return 'fx:' + s;
+    return m.id ? `id-${m.id}` : (m._tempId ? `t-${m._tempId}` : `k-${(m.created_at || '')}-${(m.message || '').slice(0,16)}`);
   }
   function sameMsgList(a, b) {
     if (!Array.isArray(a) || !Array.isArray(b)) return false;
@@ -83,254 +73,160 @@
   // ---------- icons ----------
   const sv = (props, d) => h('svg', Object.assign({fill:'currentColor','aria-hidden':'true'}, props), h('path',{d}));
   const IconHome     = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M12 3 3 10h2v10h5v-6h4v6h5V10h2L12 3z');
-  const IconChat     = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M2 4h20v12H6l-4 4V4zm4 4v2h12V8H6z');
-  const IconClose    = () => sv({width:16,height:16,viewBox:'0 0 24 24'}, 'M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.29 19.71 2.88 18.3 9.17 12 2.88 5.71 4.29 4.3 10.59 10.6 16.89 4.3z');
-  const IconUser     = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z');
-  const IconCalendar = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M7 2h2v2h6V2h2v2h3v18H4V4h3V2zm12 6H5v12h14V8zM7 10h4v4H7v-4z');
-  const Chevron      = () => sv({width:18,height:18,viewBox:'0 0 24 24'}, 'M8.12 9.29 12 13.17l3.88-3.88 1.41 1.41L12 16l-5.29-5.29 1.41-1.42z');
+  const IconChat     = () => sv({width:24,height:24,viewBox:'0 0 24 24'}, 'M2 4h20v12H6l-4 4V4zm4 4v2h12V8H6z');
+  // Stroke-based close icon (always visible on colored header)
+  const IconClose    = () => h('svg',{width:20,height:20,viewBox:'0 0 24 24','aria-hidden':'true'},
+                           h('path',{d:'M6 6l12 12M18 6 6 18', fill:'none', stroke:'currentColor', strokeWidth:2.25, strokeLinecap:'round'}));
+  const IconCalendar = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M7 2v3H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2V2h-2v3H9V2H7zm0 7h10v9H7V9z');
+  const IconChevron  = () => sv({width:18,height:18,viewBox:'0 0 24 24'}, 'M7 10l5 5 5-5');
 
-  // ---------- mini accordion ----------
-  function MiniAccordion({ items }) {
-    const [openId, setOpenId] = useState(null);
-    return h('div', { className: 'qa-acc' },
-      items.map(f => {
-        const isOpen = openId === f.id;
-        return h('div', { key: f.id, className: 'qa-acc-item' + (isOpen ? ' open' : '') },
-          h('button', {
-            type: 'button',
-            className: 'qa-acc-head',
-            onClick: () => setOpenId(isOpen ? null : f.id),
-            'aria-expanded': isOpen ? 'true' : 'false',
-            'aria-controls': `qa-acc-panel-${f.id}`,
-            id: `qa-acc-head-${f.id}`
-          },
-            h('span', { className: 'qa-acc-title' }, f.question),
-            h('span', { className: 'qa-acc-chevron', 'aria-hidden': 'true' }, h(Chevron))
-          ),
-          isOpen && h('div', {
-            id: `qa-acc-panel-${f.id}`,
-            className: 'qa-acc-panel',
-            role: 'region',
-            'aria-labelledby': `qa-acc-head-${f.id}`,
-            dangerouslySetInnerHTML: { __html: f.answer }
-          })
-        );
-      })
-    );
-  }
-
-  // ---------- Calendly inline ----------
-  function CalendlyInline({ url, active }) {
-    const ref = useRef(null);
-    useEffect(() => {
-      if (!url || !ref.current) return;
-      const SRC = 'https://assets.calendly.com/assets/external/widget.js';
-      const CSS = 'https://assets.calendly.com/assets/external/widget.css';
-
-      if (!document.querySelector(`link[href="${CSS}"]`)) {
-        const l = document.createElement('link');
-        l.rel = 'stylesheet';
-        l.href = CSS;
-        document.head.appendChild(l);
-      }
-
-      const ensureInit = () => {
-        if (window.Calendly && window.Calendly.initInlineWidget && ref.current) {
-          while (ref.current.firstChild) ref.current.removeChild(ref.current.firstChild);
-          const u = url + (url.includes('?') ? '&' : '?') + 'hide_event_type_details=1&hide_landing_page_details=1';
-          window.Calendly.initInlineWidget({ url: u, parentElement: ref.current, prefill: {}, utm: {} });
-        }
-      };
-
-      let s = document.querySelector(`script[src="${SRC}"]`);
-      if (!s) {
-        s = document.createElement('script');
-        s.src = SRC;
-        s.async = true;
-        s.onload = ensureInit;
-        document.head.appendChild(s);
-      } else {
-        ensureInit();
-      }
-    }, [url, active]);
-
-    return h('div', { ref, style: { minWidth: '320px', height: '520px', display: active ? 'block' : 'none' } });
-  }
-
-  // ------------------------------ Widget ------------------------------
+  // ---------- main ----------
   function GlobalWidget({ cfg }) {
     const {
       apiBase,
-      pollInterval = 2000,
+      pollInterval,
       isUserLoggedIn,
       currentUserName,
-      restNonce,
-      globalActions = [],
+      globalActions,
       calendlyUrl,
-      publicHeader,
-      publicToken,
-      sessionHeader,
-      enableQuickReplies = true, // << NEW
+      widgetEnabled,
+      enableQuickReplies
     } = cfg || {};
 
-    // --- storage namespace: separate for guest vs logged-in ---
-    const storagePrefix = isUserLoggedIn ? 'qa_u' : 'qa_g';
-    const sk = (suffix) => `${storagePrefix}_${suffix}`;
-    const clearSessionStorage = () => {
-      localStorage.removeItem(sk('sid'));
-      localStorage.removeItem(sk('meta'));
-      localStorage.removeItem(sk('tok'));
-    };
-
-    function makeHeaders(extra, sessionToken) {
-      const hh = Object.assign({ Accept: 'application/json' }, extra || {});
-      if (isUserLoggedIn && restNonce) hh['X-WP-Nonce'] = restNonce;
-      if (publicHeader && publicToken) hh[publicHeader] = publicToken;
-      if (sessionHeader && sessionToken) hh[sessionHeader] = sessionToken;
-      return hh;
-    }
-
+    // open/close + nav
     const [isOpen, setIsOpen] = useState(false);
-    const [tab, setTab] = useState('home'); // home|messages|profile|book
-    const [started, setStarted] = useState(false);
+    const [tab, setTab] = useState('home'); // home | messages | book
+
+    // session
+    const [sessionId, setSessionId] = useState(localStorage.getItem(sk('sid')) || '');
+    const [started, setStarted] = useState(!!sessionId);
+
+    // messages
     const [messages, setMessages] = useState([]);
-    const messagesRef = useRef(messages);
-    useEffect(() => { messagesRef.current = messages; }, [messages]);
-
     const [pending, setPending] = useState([]);
-    const [input, setInput] = useState('');
-    const [faqs, setFaqs] = useState([]);
-    const [error, setError] = useState('');
-    const [loadingStart, setLoadingStart] = useState(false);
+    const [isLoadingMsgs, setIsLoadingMsgs] = useState(false); // <<< NEW
 
-    const [sessionToken, setSessionToken] = useState('');
-    const [sessionId, setSessionId] = useState('');
+    // FAQs
+    const [faqs, setFaqs] = useState([]);
+    const [faqOpen, setFaqOpen] = useState(null);
+
+    // inputs
+    const [input, setInput] = useState('');
+    const [loadingStart, setLoadingStart] = useState(false);
+    const [error, setError] = useState('');
 
     // guest profile
     const [gName, setGName] = useState('');
     const [gEmail, setGEmail] = useState('');
     const [gPhone, setGPhone] = useState('');
+    const [gReason, setGReason] = useState('');
     const lastSentRef = useRef(0);
 
-    const [profileSaving, setProfileSaving] = useState(false);
-    const [profileMsg, setProfileMsg] = useState('');
-
-    // Build quick replies list, but honor the enableQuickReplies toggle:
+    // quick replies
     const quickReplies = (enableQuickReplies ? globalActions : [])
       .filter(a => a && a.label && a.user)
       .map(a => ({ label: a.label, text: a.user }));
 
     const emailOk = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
     const phoneOk = (s) => String(s || '').replace(/\D/g, '').length >= 6;
-    const canStart = isUserLoggedIn || (gName.trim() && emailOk(gEmail) && phoneOk(gPhone));
+    const canStart = isUserLoggedIn || (gName.trim() && emailOk(gEmail) && phoneOk(gPhone) && (gReason.trim().length >= 8));
 
-    const calUrl =
-      typeof calendlyUrl === 'string' &&
-      /^https:\/\/(?:www\.)?calendly\.com\//i.test((calendlyUrl || '').trim())
-        ? calendlyUrl.trim()
-        : '';
-
-    // load persisted session/meta (per-role)
+    // ---- fetch FAQs once (when widget opens first time) ----
     useEffect(() => {
-      const sid = localStorage.getItem(sk('sid'));
-      const meta = JSON.parse(localStorage.getItem(sk('meta')) || '{}');
-      const tok  = localStorage.getItem(sk('tok'));
-      if (meta && !isUserLoggedIn) {
-        if (meta.name) setGName(meta.name);
-        if (meta.email) setGEmail(meta.email);
-        if (meta.phone) setGPhone(meta.phone);
-      }
-      if (sid) {
-        setSessionId(sid);
-        if (tok) setSessionToken(tok);
-        setStarted(true);
-        setIsOpen(true);
-        setTab('messages');
-      }
-    }, [isUserLoggedIn]);
-
-    // persist guest meta as they type (guest namespace only)
-    useEffect(() => {
-      if (!isUserLoggedIn) {
-        localStorage.setItem(sk('meta'), JSON.stringify({ name: gName, email: gEmail, phone: gPhone }));
-      }
-    }, [gName, gEmail, gPhone, isUserLoggedIn]);
-
-    // FAQs
-    useEffect(() => {
-      const canSeeResources = isUserLoggedIn || started;
-      if (!isOpen || !canSeeResources || faqs.length) return;
+      if (!isOpen || faqs.length) return;
       fetch(`${apiBase}/chat/faqs`, { credentials:'same-origin', headers: makeHeaders() })
-        .then(r => r.json())
-        .then(d => Array.isArray(d.faqs) ? setFaqs(d.faqs.slice(0,50)) : setFaqs([]))
-        .catch(() => setFaqs([]));
-    }, [isOpen, started, isUserLoggedIn, faqs.length, apiBase]);
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(data => setFaqs(Array.isArray(data?.faqs) ? data.faqs : []))
+        .catch(()=>{});
+    }, [isOpen]);
 
-    // poll messages
+    // poll for messages (with visible loading overlay before first payload)
     useEffect(() => {
-      if (!started || !sessionId) return;
-      let timer;
-      const load = () => {
-        if (document.hidden) return;
-        fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`, {
-          method: 'GET',
-          credentials: 'same-origin',
-          headers: makeHeaders({}, sessionToken),
-        })
-          .then(r => {
-            if (!r.ok) {
-              if (r.status === 403) throw new Error('forbidden');
-              throw new Error('no_session');
-            }
-            return r.json();
-          })
-          .then(d => {
-            const serverMsgs = Array.isArray(d.messages) ? d.messages : [];
-            if (!sameMsgList(messagesRef.current, serverMsgs)) setMessages(serverMsgs);
-          })
-          .catch(err => {
-            if (err.message === 'forbidden' || err.message === 'no_session') {
-              clearSessionStorage();
-              setSessionId(''); setSessionToken('');
-              setStarted(false); setTab('home');
-              setError(err.message === 'forbidden'
-                ? 'This chat session can’t be accessed from your current account.'
-                : 'Your session expired. Please start a new chat.');
-            }
+      let alive = true, timer = null, gotFirst = false;
+
+      async function poll() {
+        if (!alive || !sessionId) return;
+        if (!gotFirst) setIsLoadingMsgs(true);
+        try {
+          const r = await fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`, {
+            credentials:'same-origin', cache:'no-store', headers: makeHeaders()
           });
-      };
-      load();
-      timer = setInterval(load, pollInterval || 2000);
-      const onVis = () => { clearInterval(timer); if (!document.hidden) { load(); timer = setInterval(load, pollInterval || 2000); } };
-      document.addEventListener('visibilitychange', onVis);
-      return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVis); };
-    }, [started, sessionId, sessionToken, apiBase, pollInterval]);
+          if (!r.ok) throw new Error(String(r.status));
+          const data = await r.json();
+          const msgs = Array.isArray(data?.messages) ? data.messages : (Array.isArray(data) ? data : []);
+          if (alive && Array.isArray(msgs) && !sameMsgList(messages, msgs)) {
+            setMessages(msgs);
+          }
+          gotFirst = true;
+        } catch (_) {
+          // keep trying silently
+        } finally {
+          if (!alive) return;
+          setIsLoadingMsgs(false);
+          timer = setTimeout(poll, pollInterval || 2000);
+        }
+      }
+
+      if (sessionId) poll();
+      return () => { alive = false; if (timer) clearTimeout(timer); };
+      // intentionally NOT depending on `messages` to avoid loopy re-renders
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionId, pollInterval, apiBase]);
+
+    function goHome(){ setTab('home'); }
+    function goMessages(){ setTab('messages'); }
+    function goBooking(){ setTab('book'); }
+
+    function restoreMetaIfAny(){
+      try {
+        const meta = JSON.parse(localStorage.getItem(sk('meta')) || '{}');
+        if (!isUserLoggedIn && meta && (meta.name || meta.email || meta.phone)) {
+          setGName(meta.name || ''); setGEmail(meta.email || ''); setGPhone(meta.phone || '');
+        }
+      } catch(_) {}
+    }
+    useEffect(()=>{ restoreMetaIfAny(); }, []);
 
     function startChat() {
       setError('');
-      if (started && sessionId) { setTab('messages'); return; }
-      if (!isUserLoggedIn && !canStart) {
-        if (!gName.trim())        return setError('Please enter your name.');
-        if (!emailOk(gEmail))     return setError('Please enter a valid email (e.g., name@example.com).');
-        if (!phoneOk(gPhone))     return setError('Please enter a valid phone number.');
-      }
       setLoadingStart(true);
+      if (!isUserLoggedIn) {
+        if (!gName.trim())        { setLoadingStart(false); return setError('Please enter your name.'); }
+        if (!emailOk(gEmail))     { setLoadingStart(false); return setError('Please enter a valid email (e.g., name@example.com).'); }
+        if (!phoneOk(gPhone))     { setLoadingStart(false); return setError('Please enter a valid phone number.'); }
+        if (!gReason.trim() || gReason.trim().length < 8) { setLoadingStart(false); return setError('Please write a short first message about why you want to speak with Professor Farhat.'); }
+      }
       const payload = isUserLoggedIn ? {} : { guest_name:gName.trim(), guest_email:gEmail.trim(), guest_phone:gPhone.trim() };
+
       fetch(`${apiBase}/chat/start`, {
         method:'POST', credentials:'same-origin',
-        headers: makeHeaders({'Content-Type':'application/json'}),
+        headers: makeHeaders({ 'Content-Type':'application/json' }),
         body: JSON.stringify(payload || {})
       })
-        .then(async r => { if (!r.ok) { const j = await r.json().catch(()=>null); throw new Error(j?.message || 'Could not start chat.'); } return r.json(); })
+        .then(async r => { if (!r.ok) { const j = await r.json().catch(()=>({})); throw new Error(j?.message || 'Could not start chat.'); } return r.json(); })
         .then(d => {
-          const sid = String(d.session_id || ''); if (!sid) throw new Error('Could not start chat.');
-          const tok = d.session_token ? String(d.session_token) : '';
+          const sid = String(d.session_id || '').trim();
+          if (!sid) throw new Error('Could not start chat.');
           setSessionId(sid); setStarted(true); setTab('messages');
           localStorage.setItem(sk('sid'), sid);
-          if (tok) { setSessionToken(tok); localStorage.setItem(sk('tok'), tok); }
-          else { localStorage.removeItem(sk('tok')); setSessionToken(''); }
+
           if (!isUserLoggedIn) {
             localStorage.setItem(sk('meta'), JSON.stringify({ name:gName.trim(), email:gEmail.trim(), phone:gPhone.trim() }));
+            try {
+              if (gReason && gReason.trim()) {
+                const first = gReason.trim();
+                setGReason('');
+                setTab('messages');
+                sendMessageText(first);
+                setTimeout(() => {
+                  setMessages(prev => prev.concat([{
+                    sender: 'admin',
+                    message: 'Thanks! Professor Farhat will reply to your message as soon as possible.',
+                    created_at: new Date().toLocaleTimeString()
+                  }]));
+                }, 350);
+              }
+            } catch(e) {}
           } else {
             localStorage.removeItem(sk('meta'));
           }
@@ -343,11 +239,12 @@
 
     function sendMessageText(text){
       const now = Date.now();
-      if (now - (lastSentRef.current || 0) < 400) return; // debounce
+      if (now - (lastSentRef.current || 0) < 300) return;
       lastSentRef.current = now;
 
       const message = (text || input || '').trim(); if (!message) return;
-      if (!sessionId){ setTab('home'); setError('Your session expired. Please start a new chat.'); return; }
+      const sid = localStorage.getItem(sk('sid')) || sessionId;
+      if (!sid){ setTab('home'); setError('Your session expired. Please start a new chat.'); return; }
 
       const temp = { _tempId: `${Date.now()}-${Math.random()}`, sender:'user', message, created_at: new Date().toLocaleTimeString() };
       setPending(prev => [...prev, temp]);
@@ -355,87 +252,59 @@
 
       fetch(`${apiBase}/chat/send`, {
         method:'POST', credentials:'same-origin',
-        headers: makeHeaders({'Content-Type':'application/json'}, sessionToken),
-        body: JSON.stringify({ session_id: sessionId, message })
+        headers: makeHeaders({ 'Content-Type':'application/json' }),
+        body: JSON.stringify({ session_id: sid, message })
       })
         .then(r => {
           if (!r.ok) {
             if (r.status === 403) throw new Error('forbidden');
             throw new Error('send_failed');
           }
-          setTimeout(()=>{ setPending(prev => prev.filter(p => p._tempId !== temp._tempId)); }, 400);
+          setTimeout(()=>{ setPending(prev => prev.filter(p => p._tempId !== temp._tempId)); }, 350);
         })
         .catch(err=>{
           setPending(prev => prev.filter(p => p._tempId !== temp._tempId));
-          if (err.message === 'forbidden') {
-            clearSessionStorage(); setSessionId(''); setSessionToken(''); setStarted(false); setTab('home');
-            setError('This chat session can’t be accessed from your current account.');
-          } else {
-            setError('Failed to send. Please try again.');
-          }
+          if (String(err || '').includes('forbidden')) setError('Your session expired. Please start a new chat.');
+          else setError('Message failed. Please try again.');
         });
     }
-    const sendMessage = () => sendMessageText(input);
 
-    function saveProfile(e){
-      e && e.preventDefault();
-      setProfileMsg('');
-      if (!gName.trim() || !emailOk(gEmail) || !phoneOk(gPhone)) { setProfileMsg('Please provide a valid name, email, and phone.'); return; }
-      localStorage.setItem(sk('meta'), JSON.stringify({ name:gName.trim(), email:gEmail.trim(), phone:gPhone.trim() }));
-      setProfileMsg('Saved!');
-    }
+    // ----- pieces -----
+    const IconChevronEl = h(IconChevron);
+    const QuickReplies = () => (
+      (isUserLoggedIn || started) && enableQuickReplies && !!quickReplies.length
+        ? h('div',{className:'qa-quick qa-quick-row'},
+            quickReplies.map((q,i)=>h('button',{className:'qa-chip-btn',key:q.label+'|'+i,onClick:()=>sendMessageText(q.text),title:`Send: ${q.text}`},q.label)))
+        : null
+    );
 
-    const headerTitle =
-      tab==='home'    ? `Hi ${isUserLoggedIn ? currentUserName : (gName || 'there')} 👋` :
-      tab==='profile' ? 'Profile' :
-      tab==='book'    ? 'Book a demo' :
-                        'Messages';
+    const FaqAccordion = () => (
+      faqs && faqs.length ? h('div',{className:'qa-acc'},
+        faqs.map((f,idx)=>h('div',{className:'qa-acc-item'+(faqOpen===idx?' open':''), key:`faq-${idx}`},
+          h('button',{className:'qa-acc-head', onClick:()=>setFaqOpen(faqOpen===idx?null:idx)},
+            h('div',{className:'qa-acc-icon'},'?'),
+            h('div',{className:'qa-acc-title'}, f.question || ''),
+            h('div',{className:'qa-acc-chevron'}, IconChevronEl)
+          ),
+          (faqOpen===idx) && h('div',{className:'qa-acc-panel', dangerouslySetInnerHTML:{__html: f.answer || ''}})
+        ))
+      ) : h('div',{className:'qa-note'}, 'No FAQs yet.')
+    );
 
-    const visitorTooltip = isUserLoggedIn ? '' : (gName&&gEmail&&gPhone) ? `Name: ${gName}\nEmail: ${gEmail}\nPhone: ${gPhone}` : '';
-    const canSeeResources = isUserLoggedIn || started;
-
-    const QuickReplies = () => {
-      if (!enableQuickReplies) return null; // << respect toggle
-      const disabled = !isUserLoggedIn && !started;
-      if (!quickReplies.length) return null;
-      return h('div',{className:'qa-card'},
-        h('div',{className:'qa-section-title'},'Quick replies'),
-        h('div',{className:'qa-quick'},
-          quickReplies.map((q,i)=>h('button',{
-            key:q.label+'|'+i, className:'qa-chip-btn'+(disabled?' disabled':''), onClick:()=>!disabled&&sendMessageText(q.text),
-            title: disabled ? 'Start chat first' : `Send: ${q.text}`
-          }, q.label))
-        ),
-        disabled && h('div',{className:'qa-note'},'Fill the form and start a chat to use quick replies.')
-      );
-    };
-
-    const BookingPane = ({ active }) => {
-      const style = { display: active ? 'block' : 'none' };
-      if (isUserLoggedIn) return h('div',{className:'qa-card',style}, h('div',{className:'qa-note'}, 'Booking is only available for guests.'));
-      if (!calUrl)       return h('div',{className:'qa-card',style}, h('div',{className:'qa-note'}, 'Booking link not configured yet.'));
-      return h('div',{className:'qa-book',style}, h(CalendlyInline, { url: calUrl, active }));
-    };
-
-    const HomePathways = () => (
-      h('div', { className:'qa-home-stack' },
+    const StartChatCard = () => (
+      h('div', null,
         h('div',{className:'qa-card qa-action'},
           h('div',{className:'qa-action-main'},
             h('div',{className:'qa-action-title'},'Click Start Chat to speak with Professor Farhat'),
-            h('div',{className:'qa-action-sub'},'(Guests must complete the form first)')
+            h('div',{className:'qa-action-sub'}, isUserLoggedIn ? 'You are logged in.' : '(Guests must complete the form first)')
           ),
-          h('button',{className:'qa-action-go',onClick:startChat,disabled:loadingStart||(!isUserLoggedIn&&!canStart)}, loadingStart?'Starting…':(started?'Go to Chat':'Start Chat'))
+          h('button',{className:'qa-action-go',onClick:startChat}, loadingStart?'Starting…':(started?'Go to Chat':'Start Chat'))
         ),
-        (!isUserLoggedIn) && h('div',{className:'qa-card qa-action'},
-          h('div',{className:'qa-action-main'},
-            h('div',{className:'qa-action-title'},'Book a demo'),
-            h('div',{className:'qa-action-sub'},'Pick a time that suits you')
-          ),
-          h('button',{className:'qa-action-go',onClick:goToBooking}, 'Book now')
-        )
+        !!error && h('div',{className:'qa-card qa-error', style:{marginTop:'8px'}}, error)
       )
     );
 
+    const headerTitle = 'Chat • Farhat Lectures';
     const combined = messages.concat(pending);
 
     return h('div', { className:'qa-floating', style:{ right:'20px', bottom: `${fabOffset}px` }},
@@ -451,66 +320,81 @@
         h('div',{className:'qa-body'},
 
           tab==='home' && h('div',{className:'qa-home'},
-            h(HomePathways),
 
             (!isUserLoggedIn && !started) && h('div',{className:'qa-card qa-guest'},
-              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_name'},'Your Name'),h('input',{id:'qa_g_name',type:'text',value:gName,onChange:e=>setGName(e.target.value),placeholder:'Jane Doe',required:true})),
-              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_email'},'Your Email'),h('input',{id:'qa_g_email',type:'email',value:gEmail,onChange:e=>setGEmail(e.target.value),placeholder:'jane@example.com',required:true})),
+              h('div',{className:'qa-hint'}, 'Fill this short form to start a chat. We’ll notify Professor Farhat.'),
+              h('ol',{className:'qa-steps'},
+                h('li',null,'1) Your info'),
+                h('li',null,'2) First message'),
+                h('li',null,'3) Start chat')
+              ),
+
+              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_name'},'Full name'),h('input',{id:'qa_g_name',type:'text',value:gName,onChange:e=>setGName(e.target.value),placeholder:'Jane Doe',required:true})),
+              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_email'},'Email'),h('input',{id:'qa_g_email',type:'email',value:gEmail,onChange:e=>setGEmail(e.target.value),placeholder:'jane@example.com',required:true})),
               h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_phone'},'Phone'),h('input',{id:'qa_g_phone',type:'tel',value:gPhone,onChange:e=>setGPhone(e.target.value),placeholder:'(555) 555-5555',required:true})),
-              !!error && h('div',{className:'qa-error'},error)
+
+              h('div',{className:'qa-field'},
+                h('label',{htmlFor:'qa_g_reason'},'Your first message'),
+                h('textarea',{
+                  id:'qa_g_reason', rows:3,
+                  value:gReason,
+                  onChange:e=>setGReason(e.target.value),
+                  placeholder:'Why do you want to speak with Professor Farhat?',
+                  required:true
+                })
+              )
             ),
 
-            h(QuickReplies),
+            h(StartChatCard),
 
-            (canSeeResources) && h('div',{className:'qa-card'},
-              h('div',{className:'qa-section-title'},'Resources for Getting Started'),
-              (faqs.length ? h(MiniAccordion,{items:faqs}) : h('div',{className:'qa-empty'},'No FAQs found.'))
+            h(QuickReplies),
+            h('div',{className:'qa-card'},
+              h('div',{className:'qa-section-title'},'Helpful resources'),
+              h(FaqAccordion)
             )
           ),
 
           tab==='messages' && h('div',{className:'qa-chat'},
             (combined.length === 0) && h('div',{className:'qa-watermark','aria-hidden':'true'}, h(IconChat)),
+
+            /* Loading overlay while first messages are fetched */
+            (isLoadingMsgs && combined.length === 0) && h('div',{className:'qa-loading'},
+              h('div',{className:'qa-spinner'}),
+              h('div',{className:'qa-text'},'Loading chat… Please wait until the conversation is fully loaded.')
+            ),
+
             h('div',{className:'qa-chat-messages'},
-              combined.map((m)=>h('div',{key:keyFor(m),className:'qa-msg '+(m.sender==='user'?'from-user':'from-admin'),title:m.sender==='user'?visitorTooltip:''},
+              combined.map((m)=>h('div',{key:keyFor(m),className:'qa-msg '+(m.sender==='user'?'from-user':'from-admin'),title:m.sender==='user'?'You':''},
                 h('div',{className:'qa-msg-text'},m.message),
                 h('div',{className:'qa-msg-time'},m.created_at),
                 m._tempId ? h('div',{className:'qa-msg-sending'},'Sending…') : null
               ))
             ),
-            // row of quick replies under the messages list (respect toggle)
-            ((isUserLoggedIn||started) && enableQuickReplies && quickReplies.length) && h('div',{className:'qa-quick qa-quick-row'},
-              quickReplies.map((q,i)=>h('button',{key:q.label+'|'+i,className:'qa-chip-btn',onClick:()=>sendMessageText(q.text),title:`Send: ${q.text}`},q.label))
+
+            ((isUserLoggedIn||started) && enableQuickReplies && !!quickReplies.length) && h('div',{className:'qa-quick qa-quick-row'},
+              quickReplies.map((q,i)=>h('button',{className:'qa-chip-btn',key:q.label+'|'+i,onClick:()=>sendMessageText(q.text),title:`Send: ${q.text}`},q.label))
             ),
             h('div',{className:'qa-chat-input'},
-              h('input',{type:'text',value:input,placeholder:'Type a message…',onChange:e=>setInput(e.target.value),onKeyDown:e=>(e.key==='Enter'&&sendMessage())}),
-              h('button',{onClick:sendMessage},'Send')
+              h('input',{type:'text',value:input,placeholder:'Type your message…',onChange:e=>setInput(e.target.value),onKeyDown:e=>{ if(e.key==='Enter') sendMessageText(); }}),
+              h('button',{onClick:()=>sendMessageText()},'Send')
             ),
-            !!error && h('div',{className:'qa-error qa-chat-error'},error)
+            !!error && h('div',{className:'qa-chat-error qa-error'}, error)
           ),
 
-          (tab==='profile' && !isUserLoggedIn) && h('form',{className:'qa-card qa-profile',onSubmit:saveProfile},
-            h('div',{className:'qa-section-title'},'Your profile'),
-            h('div',{className:'qa-field'},h('label',{htmlFor:'qa_p_name'},'Name'),h('input',{id:'qa_p_name',type:'text',value:gName,onChange:e=>setGName(e.target.value),required:true})),
-            h('div',{className:'qa-field'},h('label',{htmlFor:'qa_p_email'},'Email'),h('input',{id:'qa_p_email',type:'email',value:gEmail,onChange:e=>setGEmail(e.target.value),required:true})),
-            h('div',{className:'qa-field'},h('label',{htmlFor:'qa_p_phone'},'Phone'),h('input',{id:'qa_p_phone',type:'tel',value:gPhone,onChange:e=>setGPhone(e.target.value),required:true})),
-            h('div',{className:'qa-profile-actions'},h('button',{type:'submit',className:'qa-action-go',disabled:profileSaving},profileSaving?'Saving…':'Save')),
-            !!profileMsg && h('div',{className:'qa-note'},profileMsg)
-          ),
-
-          h(BookingPane,{active: tab==='book'})
+          (!isUserLoggedIn && tab==='book') && h('div',{className:'qa-book'},
+            calendlyUrl ? h('iframe',{src:calendlyUrl, className:'calendly-inline-widget', title:'Book with Farhat Lectures'}) : h('div',{className:'qa-card'}, 'Booking is not configured yet.')
+          )
         ),
 
         h('div',{className:'qa-nav'},
-          h('button',{className:'qa-tab'+(tab==='home'?' active':''),onClick:()=>setTab('home')},h(IconHome),h('span',null,'Home')),
-          h('button',{className:'qa-tab'+(tab==='messages'?' active':''),onClick:()=>setTab('messages'),disabled:!started},h(IconChat),h('span',null,'Messages')),
-          (!isUserLoggedIn) && h('button',{className:'qa-tab'+(tab==='book'?' active':''),onClick:goToBooking},h(IconCalendar),h('span',null,'Book')),
-          (!isUserLoggedIn) && h('button',{className:'qa-tab'+(tab==='profile'?' active':''),onClick:()=>setTab('profile')},h(IconUser),h('span',null,'Profile'))
+          h('button',{className:'qa-tab '+(tab==='home'?'active':''),onClick:goHome}, h(IconHome), h('span',null,'Home')),
+          h('button',{className:'qa-tab '+(tab==='messages'?'active':''),onClick:goMessages}, h(IconChat), h('span',null,'Messages')),
+          (!isUserLoggedIn) && h('button',{className:'qa-tab '+(tab==='book'?'active':''),onClick:goBooking}, h(IconCalendar), h('span',null,'Book'))
         )
       )
     );
   }
 
-  // Boot: merge PAGE + /public-config, then render
   function Boot() {
     const [cfg, setCfg] = useState(null);
     useEffect(() => { fetchPublicConfigWithMerge().then(setCfg); }, []);

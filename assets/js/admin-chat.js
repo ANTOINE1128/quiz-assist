@@ -42,6 +42,10 @@
   let pollTimer = null;
   let inFlight = false;
 
+  // Loading overlay state (first payload gate)
+  let firstPayloadDone = false;
+  let overlayEl = null;
+
   // ---------- DOM helpers ----------
   function ensureContainers(root) {
     // root holds 2 children: .qa-lines (server) + .qa-pending (optimistic)
@@ -58,6 +62,19 @@
       root.appendChild(pend);
     }
     return { lines, pend };
+  }
+
+  function ensureLoadingOverlay(root) {
+    let ov = root.querySelector('.qa-loading');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.className = 'qa-loading';
+      ov.innerHTML =
+        '<div class="qa-spinner"></div>' +
+        '<div class="qa-text">Loading chat… Please wait until the conversation is fully loaded.</div>';
+      root.appendChild(ov);
+    }
+    return ov;
   }
 
   function makeSig(m) {
@@ -172,14 +189,24 @@
         renderServerMessagesIncremental(lines, msgs);
         reconcilePending();
         renderPending(pend);
+
+        // Hide overlay after first successful payload
+        if (!firstPayloadDone) {
+          firstPayloadDone = true;
+          if (overlayEl) overlayEl.style.display = 'none';
+        }
       })
-      .catch(()=>{});
+      .catch(()=>{ /* keep overlay visible on error so the admin knows it's still loading */ });
   }
 
   function startMessagePolling() {
     const container = document.getElementById('qa-chat-messages');
     if (!container) return;
     ensureContainers(container);
+
+    // Create + show the loading overlay until first payload arrives
+    overlayEl = ensureLoadingOverlay(container);
+    overlayEl.style.display = 'flex';
 
     function schedule(delay) {
       clearTimeout(pollTimer);
@@ -192,7 +219,9 @@
         .finally(() => { inFlight = false; schedule(POLL_MS); });
     }
 
-    loadSessionMeta().then(() => { refreshMessages(container).finally(() => schedule(POLL_MS)); });
+    loadSessionMeta().then(() => {
+      refreshMessages(container).finally(() => schedule(POLL_MS));
+    });
 
     // Admin reply (optimistic)
     const form = document.getElementById('qa-admin-reply-form');

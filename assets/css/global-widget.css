@@ -4,28 +4,41 @@
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
 }
 .qa-fab{
-  width:56px; height:56px; border-radius:9999px; border:none; cursor:pointer;
+  width: 64px; height: 64px; border-radius:9999px; border:none; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
-  background:#0b5cff; color:#fff; box-shadow:0 8px 28px rgba(0,0,0,.15);
+  background:#0b5cff; color:#fff; box-shadow: 0 12px 28px rgba(0,0,0,.18);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'><path d='M2 4h20v12H6l-4 4V4zm4 4v2h12V8H6z'/></svg>");
+  background-repeat:no-repeat; background-position:center; background-size:24px 24px;
 }
-/* Force the chat glyph to show even if theme overrides SVGs */
 .qa-fab svg{ width:24px; height:24px; display:block; fill:#fff !important; stroke:transparent !important; }
 .qa-fab:hover{ filter:brightness(.95); }
 
 /* The panel position is overridden inline from JS to respect the lifted FAB */
 .qa-panel{
-  position:fixed; right:20px; bottom:90px; width:360px; max-width:calc(100vw - 40px);
+  position:fixed; right:20px; bottom:90px; width:440px; max-width:calc(100vw - 40px);
   background:#fff; border-radius:16px; box-shadow:0 24px 48px rgba(0,0,0,.2); overflow:hidden;
 }
-.qa-header{
-  background:#ef233c; color:#fff; padding:16px;
-  display:flex; align-items:center; justify-content:space-between;
-}
-.qa-title{ font-size:18px; font-weight:700; }
-.qa-close{ appearance:none; background:transparent; border:0; color:#fff; cursor:pointer; opacity:.9; }
-.qa-close:hover{ opacity:1; }
 
-.qa-body{ max-height:60vh; overflow:auto; padding:12px; background:#fafafa; }
+/* ===== Header ===== */
+.qa-header{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:12px 14px; background:#0b5cff; color:#fff;
+}
+.qa-title{ font-weight:800; font-size:16px; }
+.qa-close{
+  background:transparent; border:0; color:#fff; cursor:pointer; padding:6px;
+  display:flex; align-items:center; justify-content:center; border-radius:8px;
+}
+.qa-close:hover{ background:rgba(255,255,255,.12); }
+.qa-close:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
+/* Make the X icon always crisp & visible on blue header */
+.qa-close svg{ width:20px; height:20px; display:block; }
+.qa-close svg, .qa-close svg *{ fill:none !important; stroke:#ffffff !important; stroke-width:2.25; stroke-linecap:round; }
+
+/* ===== Body ===== */
+.qa-body{ max-height:68vh; overflow:auto; padding:12px; background:#fafafa; }
+
+/* ===== Cards ===== */
 .qa-card{ background:#fff; border-radius:12px; padding:12px; box-shadow:0 1px 0 rgba(0,0,0,.05); margin-bottom:10px; }
 .qa-section-title{ font-weight:700; margin-bottom:8px; }
 
@@ -33,35 +46,55 @@
 .qa-home-stack{ display:flex; flex-direction:column; gap:10px; }
 .qa-action{ display:flex; align-items:center; justify-content:space-between; }
 .qa-action-title{ font-weight:600; }
-.qa-action-sub{ font-size:12px; color:#6b7280; }
+.qa-action-sub{ font-size:12px; color:#e6eaff; opacity:.9; }
 .qa-action-go{
   background:#0b5cff; color:#fff; border:0; border-radius:9999px; padding:8px 14px; cursor:pointer; font-weight:600;
 }
 .qa-action-go:disabled{ opacity:.7; cursor:not-allowed; }
 
 /* ===== Guest form ===== */
+.qa-card.qa-guest{
+  background:#f8faff;              /* soft blue to stand out for guests */
+  border:1px solid #e5effe;
+  border-left:4px solid #3b82f6;   /* accent rail */
+}
 .qa-field{ display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+.qa-field label{
+  font-size:13px;
+  font-weight:600;
+  color:#0f172a;
+}
 .qa-field input{
   border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; font-size:14px; outline:none;
 }
 .qa-field input:focus{ border-color:#0b5cff; box-shadow:0 0 0 3px rgba(11,92,255,.15); }
+.qa-field textarea{
+  border:1px solid #e5e7eb; border-radius:8px; padding:10px 12px; font-size:14px; outline:none; resize:vertical;
+}
+.qa-field textarea:focus{ border-color:#0b5cff; box-shadow:0 0 0 3px rgba(11,92,255,.15); }
 .qa-error{ color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; padding:8px 10px; border-radius:8px; font-size:13px; }
 
-/* ===== Mini Accordion (Resources) ===== */
+/* Small helper + steps to guide guests */
+.qa-hint{
+  font-size:12px; color:#475569; background:#eef2ff; border:1px dashed #c7d2fe;
+  padding:8px 10px; border-radius:8px; margin-bottom:10px;
+}
+.qa-steps{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; padding:0; }
+.qa-steps li{
+  list-style:none; font-size:12px; color:#334155; background:#fff; border:1px solid #e2e8f0; padding:4px 8px; border-radius:9999px;
+}
+
+/* ===== Accordion (FAQs) ===== */
 .qa-acc{ display:flex; flex-direction:column; gap:14px; }
 .qa-acc-item{ border-radius:8px; background:#f8fafc; border:1px solid #e5e7eb; }
-
-/* Force our button look (themes often style <button>) */
-.qa-card .qa-acc .qa-acc-head,
-.qa-acc .qa-acc-head{
-  background:#ffffff!important; color:#0f172a!important; border:1px solid #e5e7eb!important;
-  border-radius:10px!important; padding:14px 16px!important; width:100%!important;
-  display:flex!important; align-items:center!important; justify-content:space-between!important;
-  text-align:left!important; font-weight:700!important; font-size:16px!important; cursor:pointer!important;
-  box-shadow:0 1px 0 rgba(0,0,0,.03)!important;
+.qa-acc-head{ width:100%; padding:12px 18px; display:flex; gap:10px; align-items:center; background:transparent; border:0; cursor:pointer; }
+.qa-acc-icon{
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  border-radius:8px; background:#ffffff; border:1px solid #e5e7eb;
+  color:#0b5cff; font-weight:800;   /* <<< visible by default */
 }
-.qa-acc-title{ flex:1; }
-.qa-acc-chevron{ transition:transform .18s ease; display:flex; }
+.qa-acc-title{ flex:1; color:#0f172a; font-weight:600; }
+.qa-acc-chevron{ transition:transform .18s ease; display:flex; color:#0f172a; }
 .qa-acc-item.open .qa-acc-chevron{ transform:rotate(180deg); }
 .qa-acc-panel{
   padding:0 18px 16px 18px; font-size:14px; color:#334155; line-height:1.55;
@@ -69,7 +102,7 @@
 }
 
 /* ===== Chat area ===== */
-.qa-chat{ position:relative; display:flex; flex-direction:column; height:52vh; max-height:52vh; }
+.qa-chat{ position:relative; display:flex; flex-direction:column; height:56vh; max-height:56vh; }
 .qa-chat-messages{ flex:1; overflow:auto; display:flex; flex-direction:column; gap:8px; padding:4px; }
 .qa-msg{ max-width:80%; padding:8px 10px; border-radius:12px; }
 .from-user{ align-self:flex-end; background:#e0ecff; }
@@ -81,26 +114,35 @@
 .qa-chat-input button{ background:#0b5cff; color:#fff; border:0; border-radius:10px; padding:10px 14px; cursor:pointer; }
 .qa-chat-error{ margin-top:8px; }
 
-/* Centered watermark icon (shown only when no messages) */
+/* Center watermark icon (shown only when no messages) */
 .qa-watermark{
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
   z-index:5; opacity:.14; color:#0b5cff; pointer-events:none;
 }
-.qa-watermark svg{ width:88px; height:88px; display:block; fill:currentColor !important; }
 
-/* ===== Quick replies ===== */
-.qa-quick{ display:flex; flex-wrap:wrap; gap:8px; }
-.qa-quick-row{ padding:4px 0 8px; }
-.qa-chip-btn{
-  background:#0b5cff; color:#fff; border:0; border-radius:9999px; padding:12px 18px;
-  font-size:14px; cursor:pointer; font-weight:600;
+/* ===== Loading overlay inside Messages ===== */
+.qa-loading{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:linear-gradient(180deg, rgba(250,250,250,.85), rgba(250,250,250,.65));
+  z-index:6; text-align:center; padding:16px;
 }
-.qa-chip-btn:hover{ filter:brightness(.95); }
+.qa-loading .qa-spinner{
+  width:28px; height:28px; border-radius:50%;
+  border:3px solid #c7d2fe; border-top-color:#0b5cff; animation:qa-spin 0.9s linear infinite; margin-bottom:10px;
+}
+.qa-loading .qa-text{ color:#0b5cff; font-weight:700; }
+@keyframes qa-spin{ to{ transform:rotate(360deg); } }
+
+/* ===== Quick replies (chips) ===== */
+.qa-quick{ margin-top:4px; }
+.qa-quick-row{ display:flex; gap:6px; flex-wrap:wrap; }
+.qa-chip-btn{
+  border:1px solid #e2e8f0; background:#fff; color:#0f172a; border-radius:9999px;
+  padding:6px 10px; cursor:pointer; font-size:12px; line-height:1; font-weight:600;
+}
+.qa-chip-btn:hover{ background:#f8fafc; }
 .qa-chip-btn.disabled{ opacity:.5; cursor:not-allowed; }
 .qa-note{ font-size:12px; color:#475569; margin-top:6px; }
-
-/* ===== Profile ===== */
-.qa-profile .qa-profile-actions{ margin-top:6px; }
 
 /* ===== Booking (Calendly) ===== */
 .qa-book{ background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:0; overflow:hidden; height:520px; }
@@ -113,7 +155,8 @@
   padding:10px 0!important; border:0!important; background:transparent!important; border-radius:0!important;
   cursor:pointer; color:#6b7280!important; font-weight:600; opacity:1!important;
 }
-.qa-tab svg{ width:20px; height:20px; display:block; fill:currentColor!important; stroke:currentColor!important; opacity:1!important; }
+.qa-tab svg{ width:20px; height:20px; display:block; }
+.qa-tab svg, .qa-tab svg *{ fill:currentColor !important; stroke:currentColor !important; }
 .qa-tab span{ line-height:1; }
 .qa-tab.active{ color:#0b5cff!important; }
 .qa-tab[disabled]{ opacity:.5!important; cursor:not-allowed; }
@@ -125,28 +168,7 @@
 .qa-chip-btn:focus-visible{
   outline:2px solid #0b5cff; outline-offset:2px;
 }
-/* Ensure the FAB’s chat icon is visible (some themes hide SVGs inside buttons) */
-.qa-fab svg{
-  width:24px; height:24px; display:block;
-  fill:#ffffff !important; stroke:currentColor !important;
-}
-/* --- Anti-conflict: force inline SVG icons to be visible --- */
-.qa-fab{ color:#fff !important; line-height:1 !important; }
-.qa-fab svg{ width:24px; height:24px; display:block !important; }
-.qa-fab svg, .qa-fab svg *{ fill:#ffffff !important; stroke:#ffffff !important; }
 
-/* Bottom nav icons */
-.qa-tab svg{ width:20px; height:20px; display:block !important; }
-.qa-tab svg, .qa-tab svg *{ fill:currentColor !important; stroke:currentColor !important; }
-
-/* Center watermark icon in Messages (when empty) */
-.qa-watermark{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none; }
+/* Watermark fallback sizes */
 .qa-watermark svg{ width:88px; height:88px; display:block !important; }
 .qa-watermark svg, .qa-watermark svg *{ fill:#0b5cff !important; stroke:#0b5cff !important; opacity:.14; }
-/* Fallback: draw the chat icon as a background image */
-.qa-fab{
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ffffff'><path d='M2 4h20v12H6l-4 4V4zm4 4v2h12V8H6z'/></svg>");
-  background-repeat:no-repeat;
-  background-position:center;
-  background-size:24px 24px;
-}
