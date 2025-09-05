@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Quiz Assist
  * Description: AI-powered quiz assistant + site chat for FarhatLectures.
- * Version:     2.5 | By Antoine Makdessy FINAL-TEST
+ * Version:     2.6 | By Antoine Makdessy -
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 define( 'QA_DIR', __DIR__ . '/' );

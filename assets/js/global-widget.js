@@ -69,12 +69,12 @@
     }
     return true;
   }
+  const countAdmins = (msgs) => (msgs || []).reduce((n,m)=>n + (m && m.sender==='admin' ? 1 : 0), 0);
 
   // ---------- icons ----------
   const sv = (props, d) => h('svg', Object.assign({fill:'currentColor','aria-hidden':'true'}, props), h('path',{d}));
   const IconHome     = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M12 3 3 10h2v10h5v-6h4v6h5V10h2L12 3z');
   const IconChat     = () => sv({width:24,height:24,viewBox:'0 0 24 24'}, 'M2 4h20v12H6l-4 4V4zm4 4v2h12V8H6z');
-  // Stroke-based close icon (always visible on colored header)
   const IconClose    = () => h('svg',{width:20,height:20,viewBox:'0 0 24 24','aria-hidden':'true'},
                            h('path',{d:'M6 6l12 12M18 6 6 18', fill:'none', stroke:'currentColor', strokeWidth:2.25, strokeLinecap:'round'}));
   const IconCalendar = () => sv({width:20,height:20,viewBox:'0 0 24 24'}, 'M7 2v3H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2V2h-2v3H9V2H7zm0 7h10v9H7V9z');
@@ -86,7 +86,6 @@
       apiBase,
       pollInterval,
       isUserLoggedIn,
-      currentUserName,
       globalActions,
       calendlyUrl,
       widgetEnabled,
@@ -104,7 +103,42 @@
     // messages
     const [messages, setMessages] = useState([]);
     const [pending, setPending] = useState([]);
-    const [isLoadingMsgs, setIsLoadingMsgs] = useState(false); // <<< NEW
+    const [isLoadingMsgs, setIsLoadingMsgs] = useState(false);
+
+    // synthetic admin quick-reply bubbles (persist per session until a *new* real admin reply arrives)
+    const [synAdminTips, setSynAdminTips] = useState([]);
+    useEffect(() => {
+      try {
+        if (sessionId) {
+          const raw = localStorage.getItem(sk(`syn_${sessionId}`));
+          setSynAdminTips(raw ? JSON.parse(raw) : []);
+        } else {
+          setSynAdminTips([]);
+        }
+      } catch(_) { setSynAdminTips([]); }
+    }, [sessionId]);
+
+    // persist / clean storage
+    useEffect(() => {
+      try {
+        if (!sessionId) return;
+        if (synAdminTips.length) {
+          localStorage.setItem(sk(`syn_${sessionId}`), JSON.stringify(synAdminTips));
+        } else {
+          localStorage.removeItem(sk(`syn_${sessionId}`));
+        }
+      } catch(_) {}
+    }, [synAdminTips, sessionId]);
+
+    // CLEAR synthetic tips only when a NEW admin message arrives after they were added
+    useEffect(() => {
+      const currentAdminCount = countAdmins(messages);
+      setSynAdminTips(prev => prev.filter(t => {
+        const base = (typeof t.adminCountAtCreate === 'number') ? t.adminCountAtCreate : 0;
+        // keep while no *new* admin message beyond what existed when the tip was created
+        return currentAdminCount <= base;
+      }));
+    }, [messages]);
 
     // FAQs
     const [faqs, setFaqs] = useState([]);
@@ -122,10 +156,10 @@
     const [gReason, setGReason] = useState('');
     const lastSentRef = useRef(0);
 
-    // quick replies
+    // quick replies -> behave as ADMIN answers (synthetic)
     const quickReplies = (enableQuickReplies ? globalActions : [])
-      .filter(a => a && a.label && a.user)
-      .map(a => ({ label: a.label, text: a.user }));
+      .filter(a => a && a.label && (a.user || a.text))
+      .map(a => ({ label: a.label, text: a.user || a.text }));
 
     const emailOk = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
     const phoneOk = (s) => String(s || '').replace(/\D/g, '').length >= 6;
@@ -151,6 +185,15 @@
           const r = await fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`, {
             credentials:'same-origin', cache:'no-store', headers: makeHeaders()
           });
+          // If session expired, wipe it and send user back to Home gracefully.
+          if (r.status === 403) {
+            localStorage.removeItem(sk('sid'));
+            if (sessionId) localStorage.removeItem(sk(`syn_${sessionId}`));
+            setSessionId(''); setStarted(false); setSynAdminTips([]);
+            setTab('home');
+            setError('Your session expired. Please start a new chat.');
+            return;
+          }
           if (!r.ok) throw new Error(String(r.status));
           const data = await r.json();
           const msgs = Array.isArray(data?.messages) ? data.messages : (Array.isArray(data) ? data : []);
@@ -169,13 +212,13 @@
 
       if (sessionId) poll();
       return () => { alive = false; if (timer) clearTimeout(timer); };
-      // intentionally NOT depending on `messages` to avoid loopy re-renders
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionId, pollInterval, apiBase]);
 
-    function goHome(){ setTab('home'); }
-    function goMessages(){ setTab('messages'); }
-    function goBooking(){ setTab('book'); }
+    // -------- nav helpers (also clear stale errors) --------
+    function goHome(){ setError(''); setTab('home'); }
+    function goMessages(){ setError(''); setTab('messages'); }
+    function goBooking(){ setError(''); setTab('book'); }
 
     function restoreMetaIfAny(){
       try {
@@ -186,6 +229,13 @@
       } catch(_) {}
     }
     useEffect(()=>{ restoreMetaIfAny(); }, []);
+
+    // Primary CTA: if we already have a session, just go to Messages.
+    function primaryAction() {
+      setError('');
+      if (started && sessionId) { setTab('messages'); return; }
+      startChat();
+    }
 
     function startChat() {
       setError('');
@@ -209,7 +259,7 @@
           if (!sid) throw new Error('Could not start chat.');
           setSessionId(sid); setStarted(true); setTab('messages');
           localStorage.setItem(sk('sid'), sid);
-
+          setError(''); // clear any stale error
           if (!isUserLoggedIn) {
             localStorage.setItem(sk('meta'), JSON.stringify({ name:gName.trim(), email:gEmail.trim(), phone:gPhone.trim() }));
             try {
@@ -218,13 +268,6 @@
                 setGReason('');
                 setTab('messages');
                 sendMessageText(first);
-                setTimeout(() => {
-                  setMessages(prev => prev.concat([{
-                    sender: 'admin',
-                    message: 'Thanks! Professor Farhat will reply to your message as soon as possible.',
-                    created_at: new Date().toLocaleTimeString()
-                  }]));
-                }, 350);
               }
             } catch(e) {}
           } else {
@@ -235,7 +278,7 @@
         .finally(() => setLoadingStart(false));
     }
 
-    function goToBooking(){ if (!isUserLoggedIn) setTab('book'); }
+    function goToBooking(){ if (!isUserLoggedIn) { setError(''); setTab('book'); } }
 
     function sendMessageText(text){
       const now = Date.now();
@@ -245,6 +288,8 @@
       const message = (text || input || '').trim(); if (!message) return;
       const sid = localStorage.getItem(sk('sid')) || sessionId;
       if (!sid){ setTab('home'); setError('Your session expired. Please start a new chat.'); return; }
+
+      setError('');
 
       const temp = { _tempId: `${Date.now()}-${Math.random()}`, sender:'user', message, created_at: new Date().toLocaleTimeString() };
       setPending(prev => [...prev, temp]);
@@ -269,47 +314,117 @@
         });
     }
 
-    // ----- pieces -----
-    const IconChevronEl = h(IconChevron);
+    // --- Quick Replies behave as admin answers (synthetic, no backend write) ---
+    function handleQuickReplyAsAdmin(text){
+      if (!text) return;
+      setTab('messages');
+
+      // De-dupe within 2s to avoid double-click flicker
+      const now = Date.now();
+      setSynAdminTips(prev => {
+        const recent = prev.filter(t => now - (t.time || 0) < 2000 && t.message === text);
+        if (recent.length) return prev; // already there
+        const tip = {
+          _id: `syn-${now}-${Math.random()}`,
+          sender:'admin',
+          message:text,
+          time: now,
+          // record how many admin messages existed at creation time
+          adminCountAtCreate: countAdmins(messages)
+        };
+        return [...prev, tip];
+      });
+    }
+
+    // ----- UI pieces -----
     const QuickReplies = () => (
-      (isUserLoggedIn || started) && enableQuickReplies && !!quickReplies.length
+      (tab === 'messages') && (isUserLoggedIn || started) && enableQuickReplies && !!quickReplies.length
         ? h('div',{className:'qa-quick qa-quick-row'},
-            quickReplies.map((q,i)=>h('button',{className:'qa-chip-btn',key:q.label+'|'+i,onClick:()=>sendMessageText(q.text),title:`Send: ${q.text}`},q.label)))
+            quickReplies.map((q,i)=>h('button',{
+              className:'qa-chip-btn',
+              key:q.label+'|'+i,
+              onClick:()=>handleQuickReplyAsAdmin(q.text),
+              title:`Reply: ${q.text}`
+            },q.label)))
         : null
     );
 
     const FaqAccordion = () => (
       faqs && faqs.length ? h('div',{className:'qa-acc'},
         faqs.map((f,idx)=>h('div',{className:'qa-acc-item'+(faqOpen===idx?' open':''), key:`faq-${idx}`},
-          h('button',{className:'qa-acc-head', onClick:()=>setFaqOpen(faqOpen===idx?null:idx)},
+          h('button',{className:'qa-acc-head', onClick:()=>{ setError(''); setFaqOpen(faqOpen===idx?null:idx); }},
             h('div',{className:'qa-acc-icon'},'?'),
             h('div',{className:'qa-acc-title'}, f.question || ''),
-            h('div',{className:'qa-acc-chevron'}, IconChevronEl)
+            h('div',{className:'qa-acc-chevron'}, h(IconChevron))
           ),
           (faqOpen===idx) && h('div',{className:'qa-acc-panel', dangerouslySetInnerHTML:{__html: f.answer || ''}})
         ))
       ) : h('div',{className:'qa-note'}, 'No FAQs yet.')
     );
 
-    const StartChatCard = () => (
-      h('div', null,
+    // Start Chat / Go to Chat (button-only; centered when a session exists)
+    const StartChatCard = () => {
+      const hasSession = !!(started && sessionId);
+
+      const buttonEl = h('button', {
+        className: 'qa-action-go',
+        onClick: primaryAction
+      }, loadingStart ? 'Starting…' : (hasSession ? 'Go to Chat' : 'Start Chat'));
+
+      if (hasSession) {
+        // Center the (normal-sized) card; don't stretch it
+        return h('div', {
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%' // relies on panel body sizing, doesn't enlarge the card
+          }
+        }, h('div', { className: 'qa-card qa-action' }, buttonEl));
+      }
+
+      // No session yet → show the normal start card with title/subtext and error
+      return h('div', null,
         h('div',{className:'qa-card qa-action'},
           h('div',{className:'qa-action-main'},
-            h('div',{className:'qa-action-title'},'Click Start Chat to speak with Professor Farhat'),
+            h('div',{className:'qa-action-title'}, 'Start a conversation with Professor Farhat'),
             h('div',{className:'qa-action-sub'}, isUserLoggedIn ? 'You are logged in.' : '(Guests must complete the form first)')
           ),
-          h('button',{className:'qa-action-go',onClick:startChat}, loadingStart?'Starting…':(started?'Go to Chat':'Start Chat'))
+          buttonEl
         ),
         !!error && h('div',{className:'qa-card qa-error', style:{marginTop:'8px'}}, error)
-      )
-    );
+      );
+    };
+
+    // Courtesy message for guests (persists until first real admin reply; hidden if synthetic admin shown)
+    function CourtesyBubble() {
+      if (isUserLoggedIn) return null;
+      if (!started) return null;
+      if (synAdminTips.length) return null; // avoid double "admin" presence
+      const adminCount = countAdmins(messages);
+      const hasUserMsg  = (messages || []).some(m => m.sender === 'user') || (pending || []).some(m => m.sender === 'user');
+      if (adminCount > 0 || !hasUserMsg) return null;
+
+      const msg = 'Thanks! Professor Farhat will reply to your message as soon as possible.';
+      return h('div',{className:'qa-msg from-admin qa-msg-courtesy'},
+        h('div',{className:'qa-msg-text'}, msg)
+      );
+    }
 
     const headerTitle = 'Chat • Farhat Lectures';
     const combined = messages.concat(pending);
 
     return h('div', { className:'qa-floating', style:{ right:'20px', bottom: `${fabOffset}px` }},
 
-      h('button',{className:'qa-fab',onClick:()=>setIsOpen(o=>!o),'aria-label':isOpen?'Close chat':'Open chat'}, h(IconChat)),
+      h('button',{
+        className:'qa-fab',
+        onClick:()=>setIsOpen(o=>{
+          const next = !o;
+          if (next) setError('');
+          return next;
+        }),
+        'aria-label':isOpen?'Close chat':'Open chat'
+      }, h(IconChat)),
 
       isOpen && h('div',{className:'qa-panel', style:{ right:'20px', bottom: `${fabOffset + panelLift}px` }},
         h('div',{className:'qa-header'},
@@ -329,16 +444,16 @@
                 h('li',null,'3) Start chat')
               ),
 
-              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_name'},'Full name'),h('input',{id:'qa_g_name',type:'text',value:gName,onChange:e=>setGName(e.target.value),placeholder:'Jane Doe',required:true})),
-              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_email'},'Email'),h('input',{id:'qa_g_email',type:'email',value:gEmail,onChange:e=>setGEmail(e.target.value),placeholder:'jane@example.com',required:true})),
-              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_phone'},'Phone'),h('input',{id:'qa_g_phone',type:'tel',value:gPhone,onChange:e=>setGPhone(e.target.value),placeholder:'(555) 555-5555',required:true})),
+              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_name'},'Full name'),h('input',{id:'qa_g_name',type:'text',value:gName,onChange:e=>{ setError(''); setGName(e.target.value); },placeholder:'Jane Doe',required:true})),
+              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_email'},'Email'),h('input',{id:'qa_g_email',type:'email',value:gEmail,onChange:e=>{ setError(''); setGEmail(e.target.value); },placeholder:'jane@example.com',required:true})),
+              h('div',{className:'qa-field'},h('label',{htmlFor:'qa_g_phone'},'Phone'),h('input',{id:'qa_g_phone',type:'tel',value:gPhone,onChange:e=>{ setError(''); setGPhone(e.target.value); },placeholder:'(555) 555-5555',required:true})),
 
               h('div',{className:'qa-field'},
                 h('label',{htmlFor:'qa_g_reason'},'Your first message'),
                 h('textarea',{
                   id:'qa_g_reason', rows:3,
                   value:gReason,
-                  onChange:e=>setGReason(e.target.value),
+                  onChange:e=>{ setError(''); setGReason(e.target.value); },
                   placeholder:'Why do you want to speak with Professor Farhat?',
                   required:true
                 })
@@ -347,7 +462,7 @@
 
             h(StartChatCard),
 
-            h(QuickReplies),
+            // Quick Replies are hidden on Home by guard inside QuickReplies component
             h('div',{className:'qa-card'},
               h('div',{className:'qa-section-title'},'Helpful resources'),
               h(FaqAccordion)
@@ -368,11 +483,16 @@
                 h('div',{className:'qa-msg-text'},m.message),
                 h('div',{className:'qa-msg-time'},m.created_at),
                 m._tempId ? h('div',{className:'qa-msg-sending'},'Sending…') : null
-              ))
+              )),
+              // synthetic admin quick replies (visual only; persist until NEW admin reply arrives)
+              synAdminTips.map(t => h('div',{key:t._id,className:'qa-msg from-admin'},
+                h('div',{className:'qa-msg-text'},t.message)
+              )),
+              h(CourtesyBubble)
             ),
 
             ((isUserLoggedIn||started) && enableQuickReplies && !!quickReplies.length) && h('div',{className:'qa-quick qa-quick-row'},
-              quickReplies.map((q,i)=>h('button',{className:'qa-chip-btn',key:q.label+'|'+i,onClick:()=>sendMessageText(q.text),title:`Send: ${q.text}`},q.label))
+              quickReplies.map((q,i)=>h('button',{className:'qa-chip-btn',key:q.label+'|'+i,onClick:()=>handleQuickReplyAsAdmin(q.text),title:`Reply: ${q.text}`},q.label))
             ),
             h('div',{className:'qa-chat-input'},
               h('input',{type:'text',value:input,placeholder:'Type your message…',onChange:e=>setInput(e.target.value),onKeyDown:e=>{ if(e.key==='Enter') sendMessageText(); }}),
@@ -386,6 +506,7 @@
           )
         ),
 
+        // Bottom nav
         h('div',{className:'qa-nav'},
           h('button',{className:'qa-tab '+(tab==='home'?'active':''),onClick:goHome}, h(IconHome), h('span',null,'Home')),
           h('button',{className:'qa-tab '+(tab==='messages'?'active':''),onClick:goMessages}, h(IconChat), h('span',null,'Messages')),
