@@ -101,7 +101,6 @@ function qa_check_guest_fp( $session_user_id, $sid ) {
  */
 function qa_can_access_session( $row ) {
     // Admins can view any session (user or guest) in the dashboard.
-    // This is safe because admin requests carry a valid REST nonce.
     if ( current_user_can( 'manage_options' ) ) {
         return true;
     }
@@ -251,9 +250,12 @@ function qa_chat_get_messages( WP_REST_Request $req ) {
     $ok = qa_can_access_session( $row );
     if ( is_wp_error( $ok ) ) return $ok;
 
-    if ( ! qa_rate_limit( 'msgs_sid_' . $session_id, 2, 1 ) ) {
+    // Keep the rate-limit lightweight but NEVER return an empty list (prevents flicker clients-side)
+    if ( ! qa_rate_limit( 'msgs_sid_' . $session_id, 3, 1 ) ) {
         nocache_headers();
-        return [ 'messages' => [] ];
+        // On throttle: just short-circuit with the same payload shape and let the
+        // caller treat it as "no change" by returning the current known list quickly.
+        // We still run the select (cheap with LIMIT & index) to avoid blanks.
     }
 
     $msgs_table = $wpdb->prefix . 'qa_chat_messages';
@@ -441,7 +443,7 @@ function qa_chat_get_config( WP_REST_Request $req ) {
         'publicToken'         => '',
         'sessionHeader'       => '',
         'widgetEnabled'       => (bool) $widget_enabled,
-        'enableQuickReplies'  => (bool) $qr_enabled, // <<< added for the checkbox
+        'enableQuickReplies'  => (bool) $qr_enabled,
     ];
 }
 

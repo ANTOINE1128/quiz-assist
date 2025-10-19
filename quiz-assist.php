@@ -2,7 +2,8 @@
 /**
  * Plugin Name: Quiz Assist
  * Description: AI-powered quiz assistant + site chat for FarhatLectures.
- * Version:     2.6 | By Antoine Makdessy -
+ * Version:     2.7 | By Antoine Makdesssy 
+ * 
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 define( 'QA_DIR', __DIR__ . '/' );
@@ -72,7 +73,6 @@ require_once QA_DIR . 'api-chat.php';
 require_once __DIR__ . '/includes/faq-sanitize.php';
 // require_once __DIR__ . '/includes/functions.php';
 // require_once __DIR__ . '/includes/integrations-hooks.php';
-require_once QA_DIR . 'includes/notifications.php';
 
 /** Front-end assets */
 add_action( 'wp_enqueue_scripts', function() {

@@ -3,7 +3,8 @@
   if (!window.QA_ADMIN_CHAT) return;
   const {
     apiBase, sessionId, pollInterval, restNonce,
-    adminPostBase, deleteAction, deleteNonce
+    adminPostBase, deleteAction, deleteNonce,
+    notify = {}
   } = window.QA_ADMIN_CHAT;
 
   const POLL_MS = Math.max(600, Number(pollInterval) || 1200);
@@ -35,6 +36,45 @@
     );
   }
 
+  // ---------- Notifications (desktop + sound) ----------
+  const ENABLE_DESKTOP = !!notify.enableDesktop;
+  const DING_URL = notify.soundUrl || ''; // optional; fallback below
+  let audioEl = null;
+  function ensureAudio(){
+    if (audioEl) return audioEl;
+    audioEl = new Audio(
+      DING_URL ||
+      // tiny base64 fallback (gentle ding)
+      'data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA...' // shortened
+    );
+    audioEl.preload = 'auto';
+    return audioEl;
+  }
+  function requestDesktopPermissionOnce(){
+    try {
+      if (!ENABLE_DESKTOP || !('Notification' in window)) return;
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(()=>{});
+      }
+    } catch(_) {}
+  }
+  function pingAdminNotify(opts){
+    try {
+      ensureAudio().play().catch(()=>{});
+    } catch(_) {}
+    try {
+      if (!ENABLE_DESKTOP || !('Notification' in window)) return;
+      if (Notification.permission === 'granted') {
+        const n = new Notification(opts.title || 'New chat message', {
+          body: opts.body || 'A user sent a new message.',
+          icon: opts.icon || undefined,
+          tag: opts.tag || undefined
+        });
+        setTimeout(()=>n && n.close && n.close(), 6000);
+      }
+    } catch(_) {}
+  }
+
   // ---------- State ----------
   let visitorName = 'Visitor';
   let currentServerMsgs = [];        // last array from server we reconciled to DOM
@@ -45,6 +85,9 @@
   // Loading overlay state (first payload gate)
   let firstPayloadDone = false;
   let overlayEl = null;
+
+  // Track last known newest user message signature to detect new arrivals
+  let lastUserSig = '';
 
   // ---------- DOM helpers ----------
   function ensureContainers(root) {
@@ -169,7 +212,10 @@
   function loadSessionMeta() {
     if (!parseInt(sessionId, 10)) return Promise.resolve();
     return apiGet(`/chat/session?session_id=${sessionId}`)
-      .then(r => r.json())
+      .then(r => {
+        if (r.status === 404) return Promise.reject(new Error('deleted'));
+        return r.json();
+      })
       .then(data => {
         const s = data.session || {};
         visitorName = (parseInt(s.user_id,10) > 0)
@@ -179,14 +225,48 @@
       .catch(()=>{});
   }
 
+  function detectNewUserMessages(prevMsgs, nextMsgs){
+    const newestUser = [...(nextMsgs||[])].reverse().find(m => m && m.sender === 'user');
+    const sig = newestUser ? makeSig(newestUser) : '';
+    if (!sig) return false;
+    if (sig !== lastUserSig) {
+      lastUserSig = sig;
+      return true;
+    }
+    return false;
+  }
+
+  function showDeletedAndStop(container){
+    clearTimeout(pollTimer);
+    inFlight = false;
+    firstPayloadDone = true;
+    if (overlayEl) overlayEl.style.display = 'none';
+    container.innerHTML = '<div class="qa-deleted">This session was deleted.</div>';
+  }
+
   function refreshMessages(container) {
     const { lines, pend } = ensureContainers(container);
     return apiGet(`/chat/messages?session_id=${sessionId}`)
-      .then(r => r.json())
-      .then(data => {
-        const msgs = Array.isArray(data.messages) ? data.messages : [];
-        currentServerMsgs = msgs;
-        renderServerMessagesIncremental(lines, msgs);
+      .then(async r => {
+        if (r.status === 404 || r.status === 410) {
+          showDeletedAndStop(container);
+          return;
+        }
+        const data = await r.json().catch(()=>({messages:[]}));
+
+        // IMPORTANT: Avoid flicker — if the server returns an empty list while we already
+        // have messages, treat it as "no change" (likely rate-limit / transient hiccup).
+        const msgsArr = Array.isArray(data.messages) ? data.messages : [];
+        if (firstPayloadDone && currentServerMsgs.length && msgsArr.length === 0) {
+          // keep current DOM / state, do nothing
+          return;
+        }
+
+        // Notify on new user messages (only after first payload)
+        const isNewUserMsg = firstPayloadDone && detectNewUserMessages(currentServerMsgs, msgsArr);
+
+        currentServerMsgs = msgsArr;
+        renderServerMessagesIncremental(lines, msgsArr);
         reconcilePending();
         renderPending(pend);
 
@@ -194,6 +274,15 @@
         if (!firstPayloadDone) {
           firstPayloadDone = true;
           if (overlayEl) overlayEl.style.display = 'none';
+          requestDesktopPermissionOnce();
+        }
+
+        if (isNewUserMsg && document.visibilityState !== 'visible') {
+          pingAdminNotify({
+            title: 'New chat message',
+            body: `New message from ${visitorName} in session #${sessionId || ''}`,
+            tag: `qa-chat-${sessionId || 'inbox'}`
+          });
         }
       })
       .catch(()=>{ /* keep overlay visible on error so the admin knows it's still loading */ });
@@ -204,7 +293,6 @@
     if (!container) return;
     ensureContainers(container);
 
-    // Create + show the loading overlay until first payload arrives
     overlayEl = ensureLoadingOverlay(container);
     overlayEl.style.display = 'flex';
 
@@ -236,7 +324,6 @@
         const orig = btn ? (btn.value || btn.textContent) : '';
         if (btn) { btn.disabled = true; btn.value = 'Sending…'; if (btn.textContent) btn.textContent = 'Sending…'; }
 
-        // optimistic bubble
         const temp = { _id: `${Date.now()}-${Math.random()}`, message: text, time: Date.now() };
         pending.push(temp);
         renderPending(container.querySelector('.qa-pending'));
@@ -247,11 +334,9 @@
           .then(async r => {
             const j = await r.json().catch(()=>({}));
             if (!r.ok) throw new Error(j?.message || 'Failed to send');
-            // Next poll will pick it up; also clear stale pending if needed
             setTimeout(() => { reconcilePending(); renderPending(container.querySelector('.qa-pending')); }, 1200);
           })
           .catch(err => {
-            // remove optimistic bubble on failure
             pending = pending.filter(p => p._id !== temp._id);
             renderPending(container.querySelector('.qa-pending'));
             alert(err.message || 'Failed to send');

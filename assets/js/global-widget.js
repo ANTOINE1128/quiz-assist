@@ -48,6 +48,17 @@
 
   // ---------- utils ----------
   const sk = (k) => `qa_gl_${k}`;
+  const isValidSid = (s) => typeof s === 'string' && /^\d+$/.test(s) && s !== '0';
+
+  function sanitizeStoredSid() {
+    const raw = localStorage.getItem(sk('sid'));
+    if (!isValidSid(String(raw || ''))) {
+      localStorage.removeItem(sk('sid'));
+      return '';
+    }
+    return String(raw);
+  }
+
   function makeHeaders(extra = {}) {
     const h = Object.assign({ 'Accept': 'application/json' }, extra || {});
     const nonce = (PAGE && PAGE.restNonce) ? PAGE.restNonce : '';
@@ -97,8 +108,9 @@
     const [tab, setTab] = useState('home'); // home | messages | book
 
     // session
-    const [sessionId, setSessionId] = useState(localStorage.getItem(sk('sid')) || '');
-    const [started, setStarted] = useState(!!sessionId);
+    const initialSid = sanitizeStoredSid();
+    const [sessionId, setSessionId] = useState(initialSid);
+    const [started, setStarted] = useState(isValidSid(initialSid));
 
     // messages
     const [messages, setMessages] = useState([]);
@@ -135,7 +147,6 @@
       const currentAdminCount = countAdmins(messages);
       setSynAdminTips(prev => prev.filter(t => {
         const base = (typeof t.adminCountAtCreate === 'number') ? t.adminCountAtCreate : 0;
-        // keep while no *new* admin message beyond what existed when the tip was created
         return currentAdminCount <= base;
       }));
     }, [messages]);
@@ -156,16 +167,63 @@
     const [gReason, setGReason] = useState('');
     const lastSentRef = useRef(0);
 
-    // quick replies -> behave as ADMIN answers (synthetic)
+    // quick replies
     const quickReplies = (enableQuickReplies ? globalActions : [])
       .filter(a => a && a.label && (a.user || a.text))
       .map(a => ({ label: a.label, text: a.user || a.text }));
 
     const emailOk = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || '').trim());
     const phoneOk = (s) => String(s || '').replace(/\D/g, '').length >= 6;
-    const canStart = isUserLoggedIn || (gName.trim() && emailOk(gEmail) && phoneOk(gPhone) && (gReason.trim().length >= 8));
 
-    // ---- fetch FAQs once (when widget opens first time) ----
+    // ---- helpers for session ----
+    function readGuestMeta(){
+      try { return JSON.parse(localStorage.getItem(sk('meta')) || '{}'); }
+      catch(_) { return {}; }
+    }
+    async function autoStartNewSession(){
+      try {
+        const payload = isUserLoggedIn
+          ? {}
+          : (() => {
+              const meta = readGuestMeta();
+              const name  = String(meta.name  || '').trim();
+              const email = String(meta.email || '').trim();
+              const phone = String(meta.phone || '').trim();
+              if (!name || !email || !phone) return null;
+              return { guest_name:name, guest_email:email, guest_phone:phone };
+            })();
+
+        if (!isUserLoggedIn && !payload) return null;
+
+        const r = await fetch(`${apiBase}/chat/start`, {
+          method:'POST', credentials:'same-origin',
+          headers: makeHeaders({ 'Content-Type':'application/json' }),
+          body: JSON.stringify(payload || {})
+        });
+        if (!r.ok) return null;
+        const d = await r.json().catch(()=>null);
+        const sid = d && String(d.session_id || '').trim();
+        if (!isValidSid(sid)) return null;
+
+        setSessionId(sid);
+        setStarted(true);
+        localStorage.setItem(sk('sid'), sid);
+        setSynAdminTips([]);
+        setError('');
+        return sid;
+      } catch(_) {
+        return null;
+      }
+    }
+    function clearToHome(msg){
+      localStorage.removeItem(sk('sid'));
+      if (sessionId) localStorage.removeItem(sk(`syn_${sessionId}`));
+      setSessionId(''); setStarted(false); setSynAdminTips([]);
+      setTab('home');
+      setError(msg || 'This chat was closed. Please start a new chat.');
+    }
+
+    // ---- fetch FAQs once ----
     useEffect(() => {
       if (!isOpen || faqs.length) return;
       fetch(`${apiBase}/chat/faqs`, { credentials:'same-origin', headers: makeHeaders() })
@@ -174,27 +232,27 @@
         .catch(()=>{});
     }, [isOpen]);
 
-    // poll for messages (with visible loading overlay before first payload)
+    // poll for messages
     useEffect(() => {
       let alive = true, timer = null, gotFirst = false;
 
       async function poll() {
-        if (!alive || !sessionId) return;
+        if (!alive) return;
+        if (!isValidSid(sessionId)) { setIsLoadingMsgs(false); return; }
         if (!gotFirst) setIsLoadingMsgs(true);
         try {
           const r = await fetch(`${apiBase}/chat/messages?session_id=${encodeURIComponent(sessionId)}`, {
             credentials:'same-origin', cache:'no-store', headers: makeHeaders()
           });
-          // If session expired, wipe it and send user back to Home gracefully.
-          if (r.status === 403) {
-            localStorage.removeItem(sk('sid'));
-            if (sessionId) localStorage.removeItem(sk(`syn_${sessionId}`));
-            setSessionId(''); setStarted(false); setSynAdminTips([]);
-            setTab('home');
-            setError('Your session expired. Please start a new chat.');
-            return;
-          }
+
+          // Do NOT auto-create a new session during background polling.
+          // If the session is invalid or deleted, clear it and show the Home screen.
+          if (r.status === 400) { clearToHome('Your chat session is invalid. Please start a new chat.'); return; }
+          if (r.status === 403) { clearToHome('Your session expired. Please start a new chat.'); return; }
+          if (r.status === 410) { clearToHome('This chat was closed. Please start a new chat.'); return; }
+
           if (!r.ok) throw new Error(String(r.status));
+
           const data = await r.json();
           const msgs = Array.isArray(data?.messages) ? data.messages : (Array.isArray(data) ? data : []);
           if (alive && Array.isArray(msgs) && !sameMsgList(messages, msgs)) {
@@ -215,7 +273,7 @@
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionId, pollInterval, apiBase]);
 
-    // -------- nav helpers (also clear stale errors) --------
+    // -------- nav helpers --------
     function goHome(){ setError(''); setTab('home'); }
     function goMessages(){ setError(''); setTab('messages'); }
     function goBooking(){ setError(''); setTab('book'); }
@@ -230,10 +288,10 @@
     }
     useEffect(()=>{ restoreMetaIfAny(); }, []);
 
-    // Primary CTA: if we already have a session, just go to Messages.
+    // Primary CTA
     function primaryAction() {
       setError('');
-      if (started && sessionId) { setTab('messages'); return; }
+      if (started && isValidSid(sessionId)) { setTab('messages'); return; }
       startChat();
     }
 
@@ -243,7 +301,7 @@
       if (!isUserLoggedIn) {
         if (!gName.trim())        { setLoadingStart(false); return setError('Please enter your name.'); }
         if (!emailOk(gEmail))     { setLoadingStart(false); return setError('Please enter a valid email (e.g., name@example.com).'); }
-        if (!phoneOk(gPhone))     { setLoadingStart(false); return setError('Please enter a valid phone number.'); }
+        if (!String(gPhone || '').replace(/\D/g, '').length) { setLoadingStart(false); return setError('Please enter a valid phone number.'); }
         if (!gReason.trim() || gReason.trim().length < 8) { setLoadingStart(false); return setError('Please write a short first message about why you want to speak with Professor Farhat.'); }
       }
       const payload = isUserLoggedIn ? {} : { guest_name:gName.trim(), guest_email:gEmail.trim(), guest_phone:gPhone.trim() };
@@ -256,10 +314,10 @@
         .then(async r => { if (!r.ok) { const j = await r.json().catch(()=>({})); throw new Error(j?.message || 'Could not start chat.'); } return r.json(); })
         .then(d => {
           const sid = String(d.session_id || '').trim();
-          if (!sid) throw new Error('Could not start chat.');
+          if (!isValidSid(sid)) throw new Error('Could not start chat.');
           setSessionId(sid); setStarted(true); setTab('messages');
           localStorage.setItem(sk('sid'), sid);
-          setError(''); // clear any stale error
+          setError('');
           if (!isUserLoggedIn) {
             localStorage.setItem(sk('meta'), JSON.stringify({ name:gName.trim(), email:gEmail.trim(), phone:gPhone.trim() }));
             try {
@@ -278,40 +336,56 @@
         .finally(() => setLoadingStart(false));
     }
 
-    function goToBooking(){ if (!isUserLoggedIn) { setError(''); setTab('book'); } }
-
     function sendMessageText(text){
       const now = Date.now();
       if (now - (lastSentRef.current || 0) < 300) return;
       lastSentRef.current = now;
 
       const message = (text || input || '').trim(); if (!message) return;
-      const sid = localStorage.getItem(sk('sid')) || sessionId;
-      if (!sid){ setTab('home'); setError('Your session expired. Please start a new chat.'); return; }
+      let sid = localStorage.getItem(sk('sid')) || sessionId;
+
+      // If sid invalid or deleted, create fresh session *now* (on send), not during polling.
+      const doWithValidSid = async () => {
+        if (!isValidSid(String(sid || ''))) {
+          const ns = await autoStartNewSession();
+          if (!ns) throw new Error('forbidden');
+          sid = ns;
+        }
+        return sid;
+      };
 
       setError('');
-
       const temp = { _tempId: `${Date.now()}-${Math.random()}`, sender:'user', message, created_at: new Date().toLocaleTimeString() };
       setPending(prev => [...prev, temp]);
       setInput('');
 
-      fetch(`${apiBase}/chat/send`, {
+      const doSend = (sessionToUse) => fetch(`${apiBase}/chat/send`, {
         method:'POST', credentials:'same-origin',
         headers: makeHeaders({ 'Content-Type':'application/json' }),
-        body: JSON.stringify({ session_id: sid, message })
-      })
-        .then(r => {
-          if (!r.ok) {
-            if (r.status === 403) throw new Error('forbidden');
-            throw new Error('send_failed');
-          }
-          setTimeout(()=>{ setPending(prev => prev.filter(p => p._tempId !== temp._tempId)); }, 350);
-        })
-        .catch(err=>{
-          setPending(prev => prev.filter(p => p._tempId !== temp._tempId));
-          if (String(err || '').includes('forbidden')) setError('Your session expired. Please start a new chat.');
-          else setError('Message failed. Please try again.');
-        });
+        body: JSON.stringify({ session_id: sessionToUse, message })
+      });
+
+      (async () => {
+        const validSid = await doWithValidSid();
+        let r = await doSend(validSid);
+
+        // Handle 400/410 by auto-recreate once, then retry (only when user is sending)
+        if (r.status === 400 || r.status === 410) {
+          const ns = await autoStartNewSession();
+          if (!ns) throw new Error('recreate_failed');
+          r = await doSend(ns);
+        }
+
+        if (!r.ok) throw new Error('send_failed');
+
+        setTimeout(()=>{ setPending(prev => prev.filter(p => p._tempId !== temp._tempId)); }, 350);
+      })().catch(err=>{
+        setPending(prev => prev.filter(p => p._tempId !== temp._tempId));
+        const msg = String(err || '');
+        if (msg.includes('forbidden')) setError('Your session expired. Please start a new chat.');
+        else if (msg.includes('recreate_failed')) clearToHome('This chat was closed. Please start a new chat.');
+        else setError('Message failed. Please try again.');
+      });
     }
 
     // --- Quick Replies behave as admin answers (synthetic, no backend write) ---
@@ -319,17 +393,15 @@
       if (!text) return;
       setTab('messages');
 
-      // De-dupe within 2s to avoid double-click flicker
       const now = Date.now();
       setSynAdminTips(prev => {
         const recent = prev.filter(t => now - (t.time || 0) < 2000 && t.message === text);
-        if (recent.length) return prev; // already there
+        if (recent.length) return prev;
         const tip = {
           _id: `syn-${now}-${Math.random()}`,
           sender:'admin',
           message:text,
           time: now,
-          // record how many admin messages existed at creation time
           adminCountAtCreate: countAdmins(messages)
         };
         return [...prev, tip];
@@ -337,18 +409,6 @@
     }
 
     // ----- UI pieces -----
-    const QuickReplies = () => (
-      (tab === 'messages') && (isUserLoggedIn || started) && enableQuickReplies && !!quickReplies.length
-        ? h('div',{className:'qa-quick qa-quick-row'},
-            quickReplies.map((q,i)=>h('button',{
-              className:'qa-chip-btn',
-              key:q.label+'|'+i,
-              onClick:()=>handleQuickReplyAsAdmin(q.text),
-              title:`Reply: ${q.text}`
-            },q.label)))
-        : null
-    );
-
     const FaqAccordion = () => (
       faqs && faqs.length ? h('div',{className:'qa-acc'},
         faqs.map((f,idx)=>h('div',{className:'qa-acc-item'+(faqOpen===idx?' open':''), key:`faq-${idx}`},
@@ -362,9 +422,8 @@
       ) : h('div',{className:'qa-note'}, 'No FAQs yet.')
     );
 
-    // Start Chat / Go to Chat (button-only; centered when a session exists)
     const StartChatCard = () => {
-      const hasSession = !!(started && sessionId);
+      const hasSession = isValidSid(sessionId) && started;
 
       const buttonEl = h('button', {
         className: 'qa-action-go',
@@ -372,18 +431,11 @@
       }, loadingStart ? 'Starting…' : (hasSession ? 'Go to Chat' : 'Start Chat'));
 
       if (hasSession) {
-        // Center the (normal-sized) card; don't stretch it
         return h('div', {
-          style: {
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: '100%' // relies on panel body sizing, doesn't enlarge the card
-          }
+          style: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }
         }, h('div', { className: 'qa-card qa-action' }, buttonEl));
       }
 
-      // No session yet → show the normal start card with title/subtext and error
       return h('div', null,
         h('div',{className:'qa-card qa-action'},
           h('div',{className:'qa-action-main'},
@@ -396,16 +448,15 @@
       );
     };
 
-    // Courtesy message for guests (persists until first real admin reply; hidden if synthetic admin shown)
+    // Courtesy message for guests (persists until first real admin reply)
     function CourtesyBubble() {
       if (isUserLoggedIn) return null;
       if (!started) return null;
-      if (synAdminTips.length) return null; // avoid double "admin" presence
       const adminCount = countAdmins(messages);
       const hasUserMsg  = (messages || []).some(m => m.sender === 'user') || (pending || []).some(m => m.sender === 'user');
       if (adminCount > 0 || !hasUserMsg) return null;
 
-      const msg = 'Thanks! Professor Farhat will reply to your message as soon as possible.';
+      const msg = 'Thanks! Professor Farhat will reply soon. You can also WhatsApp or call him at +1 (484) 894-1008';
       return h('div',{className:'qa-msg from-admin qa-msg-courtesy'},
         h('div',{className:'qa-msg-text'}, msg)
       );
@@ -450,19 +501,14 @@
 
               h('div',{className:'qa-field'},
                 h('label',{htmlFor:'qa_g_reason'},'Your first message'),
-                h('textarea',{
-                  id:'qa_g_reason', rows:3,
-                  value:gReason,
+                h('textarea',{ id:'qa_g_reason', rows:3, value:gReason,
                   onChange:e=>{ setError(''); setGReason(e.target.value); },
-                  placeholder:'Why do you want to speak with Professor Farhat?',
-                  required:true
-                })
+                  placeholder:'Why do you want to speak with Professor Farhat?', required:true })
               )
             ),
 
             h(StartChatCard),
 
-            // Quick Replies are hidden on Home by guard inside QuickReplies component
             h('div',{className:'qa-card'},
               h('div',{className:'qa-section-title'},'Helpful resources'),
               h(FaqAccordion)
@@ -472,7 +518,6 @@
           tab==='messages' && h('div',{className:'qa-chat'},
             (combined.length === 0) && h('div',{className:'qa-watermark','aria-hidden':'true'}, h(IconChat)),
 
-            /* Loading overlay while first messages are fetched */
             (isLoadingMsgs && combined.length === 0) && h('div',{className:'qa-loading'},
               h('div',{className:'qa-spinner'}),
               h('div',{className:'qa-text'},'Loading chat… Please wait until the conversation is fully loaded.')
@@ -484,7 +529,6 @@
                 h('div',{className:'qa-msg-time'},m.created_at),
                 m._tempId ? h('div',{className:'qa-msg-sending'},'Sending…') : null
               )),
-              // synthetic admin quick replies (visual only; persist until NEW admin reply arrives)
               synAdminTips.map(t => h('div',{key:t._id,className:'qa-msg from-admin'},
                 h('div',{className:'qa-msg-text'},t.message)
               )),
@@ -506,7 +550,6 @@
           )
         ),
 
-        // Bottom nav
         h('div',{className:'qa-nav'},
           h('button',{className:'qa-tab '+(tab==='home'?'active':''),onClick:goHome}, h(IconHome), h('span',null,'Home')),
           h('button',{className:'qa-tab '+(tab==='messages'?'active':''),onClick:goMessages}, h(IconChat), h('span',null,'Messages')),

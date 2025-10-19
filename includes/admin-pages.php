@@ -26,6 +26,13 @@ add_action( 'admin_enqueue_scripts', function() {
         }
         if ( file_exists( QA_DIR . 'assets/js/admin-chat.js' ) ) {
             wp_enqueue_script( 'qa-admin-chat-js', QA_URL . 'assets/js/admin-chat.js', [], filemtime( QA_DIR . 'assets/js/admin-chat.js' ), true );
+
+            // Optional audio file (you can add assets/media/ding.mp3). If missing, JS uses a built-in base64 fallback.
+            $ding_url = '';
+            if ( file_exists( QA_DIR . 'assets/media/ding.mp3' ) ) {
+                $ding_url = QA_URL . 'assets/media/ding.mp3';
+            }
+
             wp_localize_script( 'qa-admin-chat-js', 'QA_ADMIN_CHAT', [
                 'apiBase'        => rest_url('quiz-assist/v1'),
                 'sessionId'      => intval( $_GET['session_id'] ?? 0 ),
@@ -34,6 +41,11 @@ add_action( 'admin_enqueue_scripts', function() {
                 'adminPostBase'  => admin_url('admin-post.php'),
                 'deleteAction'   => 'qa_delete_chat_session',
                 'deleteNonce'    => wp_create_nonce( 'qa_delete_chat_any' ),
+                // NEW: notify bits
+                'notify'         => [
+                    'enableDesktop' => true,
+                    'soundUrl'      => $ding_url, // can be empty (JS will fallback)
+                ],
             ] );
         }
     }
@@ -152,7 +164,7 @@ add_action( 'admin_post_qa_send_admin_message', function(){
     exit;
 });
 
-/** Admin: delete session (unchanged) */
+/** Admin: delete session (hard delete + clear guest fingerprint) */
 add_action( 'admin_post_qa_delete_chat_session', function(){
     if ( ! current_user_can('manage_options' ) ) {
         wp_die( 'Unauthorized', '', [ 'response' => 403 ] );
@@ -164,6 +176,11 @@ add_action( 'admin_post_qa_delete_chat_session', function(){
     if ( $sid ) {
         $wpdb->delete( $wpdb->prefix.'qa_chat_messages', [ 'session_id' => $sid ], [ '%d' ] );
         $wpdb->delete( $wpdb->prefix.'qa_chat_sessions', [ 'id' => $sid ], [ '%d' ] );
+
+        // Also clear stored guest fingerprint transient so a deleted session can't “linger”
+        if ( function_exists('qa_fp_key') ) {
+            delete_transient( qa_fp_key( $sid ) );
+        }
     }
 
     wp_safe_redirect( admin_url( 'admin.php?page=quiz_assist_chats' ) );
