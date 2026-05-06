@@ -1,0 +1,79 @@
+/* Chats screen tweaks */
+.qa-admin-chat-box {
+  position: relative;           /* needed for loading overlay */
+  border: 1px solid #ddd;
+  padding: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.qa-admin-chat-box .qa-line { margin: 0 0 6px; }
+.qa-admin-chat-box .qa-line.admin strong { color: #0052cc; }
+.qa-admin-chat-box .qa-line.user  strong { color: #111; }
+
+.qa-admin-chat-box .qa-ts {
+  font-size: 11px;
+  color: #666;
+  margin-left: 8px;
+}
+
+.qa-reply-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+}
+
+.unread-badge {
+  background: #d63333;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.qa-sessions-table td.qa-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.qa-sessions-table td.qa-actions .button { margin-left: 6px; }
+
+.qa-sessions-table a.button-link-delete {
+  background: #f8d7da;
+  color: #721c24 !important;
+  border-color: #f1b0b7;
+}
+.qa-sessions-table a.button-link-delete:hover {
+  background: #f5c6cb;
+  color: #721c24 !important;
+}
+
+#qa-chat-messages .qa-pending .qa-line.pending {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ===== Loading overlay inside admin chat ===== */
+.qa-admin-chat-box .qa-loading{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.85));
+  z-index: 10;
+  text-align:center;
+  padding:16px;
+}
+.qa-admin-chat-box .qa-loading .qa-spinner{
+  width:28px; height:28px; border-radius:50%;
+  border:3px solid #c7d2fe; border-top-color:#0b5cff;
+  animation:qa-spin 0.9s linear infinite; margin-bottom:10px;
+}
+.qa-admin-chat-box .qa-loading .qa-text{
+  color:#0b5cff; font-weight:700;
+}
+@keyframes qa-spin{ to{ transform: rotate(360deg); } }
